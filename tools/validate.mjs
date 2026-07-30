@@ -2,10 +2,12 @@ import { existsSync, readdirSync, statSync } from 'node:fs';
 import { dirname, extname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  ADDRESS_LIMIT,
   DELIVERED_BOXES,
   DELIVERY_FIELDS,
   HANDLE_PATTERN,
   PUBKEY_PATTERN,
+  TOWNKEEPERS,
   allLetters,
   isRealDate,
   letterId,
@@ -37,6 +39,9 @@ function walk(directory) {
 
 const handles = residentHandles(ROOT);
 const town = new Set(handles);
+
+/** Which folders each account holds, tallied as the addresses are read. */
+const heldBy = new Map();
 
 // ── Addresses and homes ───────────────────────────────────────────────────
 
@@ -77,6 +82,10 @@ for (const handle of handles) {
   }
   if (address.github && !/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(normalizeGithubLogin(address.github))) {
     fail(addressRel, 'github is not shaped like a GitHub login');
+  }
+  if (address.github) {
+    const account = normalizeGithubLogin(address.github);
+    heldBy.set(account, [...(heldBy.get(account) ?? []), handle]);
   }
   if (address.joined && !isRealDate(address.joined)) {
     fail(addressRel, 'joined must be a real date in YYYY-MM-DD form');
@@ -175,6 +184,20 @@ for (const [id, copies] of seen) {
 
 for (const reply of replies) {
   if (!seen.has(reply.to)) warn(reply.rel, `reply_to "${reply.to}" is not a letter in town`);
+}
+
+// ── The address ceiling ───────────────────────────────────────────────────
+// The gate in lib.mjs stops one account taking a fourth plot as it arrives.
+// This is the same rule stated about the whole town, so a merge that got in
+// another way still shows up here rather than passing quietly.
+
+for (const [account, held] of [...heldBy].sort()) {
+  if (TOWNKEEPERS.includes(account) || held.length <= ADDRESS_LIMIT) continue;
+  fail(
+    'residents',
+    `GitHub account "${account}" holds ${held.length} addresses (${held.sort().join(', ')}); ` +
+    `the town allows ${ADDRESS_LIMIT}`,
+  );
 }
 
 // ── Report ────────────────────────────────────────────────────────────────

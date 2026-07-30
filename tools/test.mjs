@@ -6,16 +6,17 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
+import { ADDRESS_LIMIT, TOWNKEEPERS } from './lib.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const built = [];
 
 // ── Fixtures ──────────────────────────────────────────────────────────────
 
-function address(dir, handle, name) {
+function address(dir, handle, name, github = handle) {
   mkdirSync(join(dir, 'residents', handle), { recursive: true });
   writeFileSync(join(dir, 'residents', handle, 'ADDRESS.md'),
-    `---\nhandle: ${handle}\nname: ${name}\nhousehold: ${name}\ngithub: ${handle}\njoined: 2026-01-01\n---\n\n# ${name}\n\nHere.\n`);
+    `---\nhandle: ${handle}\nname: ${name}\nhousehold: ${name}\ngithub: ${github}\njoined: 2026-01-01\n---\n\n# ${name}\n\nHere.\n`);
   writeFileSync(join(dir, 'residents', handle, 'HOME.md'),
     `---\nresident: ${handle}\ntitle: The ${name}\nlocation: The lane\nimage:\n---\n\n# The ${name}\n\nA home.\n`);
 }
@@ -198,9 +199,14 @@ test('delivery is safe to rerun and never doubles a crossing', () => {
 
 // ── The pull-request gate ─────────────────────────────────────────────────
 
-/** A town under version control, so the scope checker has a base to compare against. */
-function gitTown() {
+/**
+ * A town under version control, so the scope checker has a base to compare
+ * against. `settle` runs before the first commit, for scenarios that need
+ * residents to already live here rather than to be arriving.
+ */
+function gitTown(settle = () => {}) {
   const dir = build();
+  settle(dir);
   const git = (...args) =>
     execFileSync('git', args, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   git('init', '-q', '-b', 'main');
@@ -295,6 +301,57 @@ test('the gate rejects a forged receipt before it can merge', () => {
   assert.match(result.out, /only Thaw adds delivered and delivered_by/);
 });
 
+// ── The address ceiling ───────────────────────────────────────────────────
+
+/** A town where `account` already keeps `count` plots. */
+const holding = (account, count) => (dir) => {
+  for (let index = 1; index <= count; index += 1) {
+    address(dir, `plot-${index}`, `Plot ${index}`, account);
+  }
+};
+
+test('an account at the ceiling cannot take another address', () => {
+  const scenario = gitTown(holding('collector', ADDRESS_LIMIT));
+  address(scenario.dir, 'one-more', 'One More', 'collector');
+  const result = propose(scenario, 'collector');
+  assert.equal(result.ok, false);
+  // Singular at a ceiling of one, plural above it.
+  assert.match(result.out, new RegExp(`already keeps ${ADDRESS_LIMIT} address`));
+  assert.match(result.out, /the town allows/);
+});
+
+test('an account below the ceiling may still move in', () => {
+  const scenario = gitTown(holding('collector', ADDRESS_LIMIT - 1));
+  address(scenario.dir, 'one-more', 'One More', 'collector');
+  const result = propose(scenario, 'collector');
+  assert.ok(result.ok, result.out);
+  assert.match(result.out, /Address scope check passed/);
+});
+
+test('the ceiling counts new plots, not changes to a home already held', () => {
+  const scenario = gitTown(holding('collector', ADDRESS_LIMIT));
+  writeFileSync(join(scenario.dir, 'residents', 'plot-1', 'HOME.md'),
+    `---\nresident: plot-1\ntitle: Renamed\nlocation: The lane\nimage:\n---\n\n# Renamed\n\nStill here.\n`);
+  const result = propose(scenario, 'collector');
+  assert.ok(result.ok, result.out);
+});
+
+test('the town\'s own keeping is not capped', { skip: TOWNKEEPERS.length === 0 }, () => {
+  const keeper = TOWNKEEPERS[0];
+  const scenario = gitTown(holding(keeper, ADDRESS_LIMIT));
+  address(scenario.dir, 'one-more', 'One More', keeper);
+  const result = propose(scenario, keeper);
+  assert.ok(result.ok, result.out);
+});
+
+test('validate reports a town where one account holds too many', () => {
+  const dir = build();
+  holding('collector', ADDRESS_LIMIT + 1)(dir);
+  const result = run(dir, 'validate.mjs');
+  assert.equal(result.ok, false);
+  assert.match(result.out, new RegExp(`"collector" holds ${ADDRESS_LIMIT + 1} addresses`));
+});
+
 test('a pull request cannot touch two resident folders', () => {
   const scenario = gitTown();
   address(scenario.dir, 'north-lantern', 'North');
@@ -311,7 +368,7 @@ test('a pull request cannot touch two resident folders', () => {
  * the gate, the review, the comment, and the merge — without a live PR.
  */
 async function stubHub({ author, files, head, base, verdict }) {
-  const seen = { comments: [], merged: false, reviewed: null };
+  const seen = { comments: [], merged: false, reviewed: null, labels: [] };
 
   const server = createServer((req, res) => {
     const url = new URL(req.url, 'http://stub');
@@ -330,6 +387,18 @@ async function stubHub({ author, files, head, base, verdict }) {
       return;
     }
     if (url.pathname.endsWith('/merge')) { seen.merged = true; return send(200, { merged: true }); }
+    if (url.pathname.endsWith('/labels')) {
+      if (req.method !== 'POST') return send(200, []);
+      let raw = '';
+      req.on('data', (chunk) => { raw += chunk; });
+      req.on('end', () => {
+        const body = JSON.parse(raw || '{}');
+        // Creating the label itself carries a name; applying it carries a list.
+        if (Array.isArray(body.labels)) seen.labels.push(...body.labels);
+        send(201, {});
+      });
+      return;
+    }
     if (url.pathname.endsWith('/files')) {
       return send(200, files.map((file) => ({ filename: file.path, status: file.status })));
     }
@@ -343,6 +412,20 @@ async function stubHub({ author, files, head, base, verdict }) {
     if (url.pathname.includes('/contents/')) {
       const path = decodeURIComponent(url.pathname.split('/contents/')[1]);
       const tree = url.searchParams.get('ref') === 'headsha' ? head : base;
+
+      // GitHub answers a directory with a listing. Thaw asks for one when it
+      // counts how many addresses an account already keeps.
+      if (path === 'residents') {
+        const names = [...new Set(
+          Object.keys(tree)
+            .map((file) => file.match(/^residents\/([^/]+)\//)?.[1])
+            .filter(Boolean),
+        )];
+        return names.length === 0
+          ? send(404, {})
+          : send(200, names.map((name) => ({ type: 'dir', name })));
+      }
+
       return tree[path] === undefined ? send(404, {}) : send(200, tree[path]);
     }
     return send(200, {
@@ -455,6 +538,64 @@ test('Claude cannot approve past a hard rule, and a revise verdict blocks the me
     assert.equal(hub.seen.merged, false, 'a revise verdict must not merge');
     assert.match(hub.seen.comments[0], /An API key is published here/);
     assert.match(hub.seen.comments[0], /token in HOME\.md/);
+    // The resident can fix a revise themselves; nobody else is needed.
+    assert.deepEqual(hub.seen.labels, [], 'a revise must not call for a human');
+    assert.doesNotMatch(hub.seen.comments[0], /needs your eyes/);
+  } finally {
+    await hub.close();
+  }
+});
+
+test('an escalation labels the pull request and names a maintainer', async () => {
+  const hub = await stubHub({
+    author: 'north-lantern',
+    files: [
+      { path: 'residents/north-lantern/ADDRESS.md', status: 'added' },
+      { path: 'residents/north-lantern/HOME.md', status: 'added' },
+    ],
+    head: {
+      'residents/north-lantern/ADDRESS.md': ADDRESS_MD('north-lantern', 'north-lantern'),
+      'residents/north-lantern/HOME.md': HOME_MD,
+    },
+    base: {},
+    verdict: { verdict: 'human', reason: 'Consent here is unclear to me.', concerns: ['who is Jay?'] },
+  });
+
+  try {
+    const result = await runAsync(build(), 'thaw.mjs', {
+      GITHUB_TOKEN: 'stub', GITHUB_REPOSITORY: 'verglas-dev/verglas', PR_NUMBER: '7',
+      ANTHROPIC_API_KEY: 'stub', GITHUB_API_URL: hub.origin, ANTHROPIC_BASE_URL: hub.origin,
+      GITHUB_OUTPUT: '', THAW_MAINTAINER: 'wingetx',
+    });
+    assert.ok(result.ok, result.out);
+    assert.equal(hub.seen.merged, false, 'an escalation must not merge');
+    assert.deepEqual(hub.seen.labels, ['needs-human']);
+    assert.match(hub.seen.comments[0], /@wingetx — this one needs your eyes/);
+    assert.match(hub.seen.comments[0], /Consent here is unclear to me/);
+  } finally {
+    await hub.close();
+  }
+});
+
+test('an escalation falls back to the repository owner when no maintainer is set', async () => {
+  const hub = await stubHub({
+    author: 'north-lantern',
+    files: [
+      { path: 'residents/north-lantern/ADDRESS.md', status: 'added' },
+      { path: 'residents/north-lantern/HOME.md', status: 'added' },
+    ],
+    head: {
+      'residents/north-lantern/ADDRESS.md': ADDRESS_MD('north-lantern', 'north-lantern'),
+      'residents/north-lantern/HOME.md': HOME_MD,
+    },
+    base: {},
+    verdict: { verdict: 'human', reason: 'Not mine to call.', concerns: [] },
+  });
+
+  try {
+    const result = await runThaw(build(), hub.origin);
+    assert.ok(result.ok, result.out);
+    assert.match(hub.seen.comments[0], /@verglas-dev — this one needs your eyes/);
   } finally {
     await hub.close();
   }

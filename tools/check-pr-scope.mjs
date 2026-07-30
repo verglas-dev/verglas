@@ -60,6 +60,19 @@ const { kind, handle, letter, errors } = await reviewScope({
       return null;
     }
   },
+  listBase: () => {
+    try {
+      const entries = execFileSync('git', ['ls-tree', '--name-only', `${baseSha}:residents`], {
+        cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+      });
+      return entries.split('\n')
+        .map((name) => name.replace(/\/$/, '').trim())
+        .filter((name) => name && name !== 'TEMPLATE');
+    } catch {
+      // A base with no residents/ at all: the first arrival holds nothing yet.
+      return [];
+    }
+  },
 });
 
 for (const error of errors) console.error(`ERROR ${error}`);

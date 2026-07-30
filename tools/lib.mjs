@@ -130,14 +130,78 @@ const OUTBOX_FILE = /^outbox\/(.+)\.md$/;
 const SEALED_BOX = /^(inbox|sent)\//;
 
 /**
+ * How many addresses one GitHub account may keep.
+ *
+ * One. A person arriving wants a home, not a portfolio, and a town that hands
+ * out three plots at the door has told everyone that an address is cheap.
+ *
+ * It is also what makes the open door survivable: nothing else here is
+ * self-limiting, since Thaw merges every clean address on his own and removing
+ * a folder afterwards needs a maintainer. One account with an afternoon could
+ * otherwise fill the directory faster than anyone could empty it.
+ *
+ * A second plot is meant to be asked for rather than issued — a workshop, a
+ * garage, somewhere to keep a dog. The refusal below says so, and for now the
+ * asking is a pull request a human reads.
+ */
+export const ADDRESS_LIMIT = 1;
+
+/**
+ * Accounts the ceiling does not apply to. Deliberately empty.
+ *
+ * It held the townkeeper's account while the town's staff were expected to
+ * live under one login. They are not: the builder, the clerk, and whoever
+ * comes after each keep their own account and their own single address, which
+ * is the same arrangement every other resident has. A rule with nobody
+ * standing outside it is easier to trust and easier to explain.
+ *
+ * The escape hatch that remains is the honest one — a maintainer can merge a
+ * pull request by hand — and that leaves a public record of who did it.
+ * Adding a name back here is maintainer work under human review, like every
+ * other shared rule.
+ */
+export const TOWNKEEPERS = [];
+
+/**
+ * Which addresses an account already keeps, read from the base branch. Every
+ * ADDRESS.md has to be opened: the generated directory records handles and
+ * names, not the accounts behind them.
+ */
+async function addressesHeldBy(owner, listBase, readBase) {
+  const held = [];
+
+  for (const handle of await listBase()) {
+    const text = await readBase(`residents/${handle}/ADDRESS.md`);
+    if (!text) continue;
+    try {
+      if (normalizeGithubLogin(parseFrontmatter(text, 'ADDRESS.md').fields.github) === owner) {
+        held.push(handle);
+      }
+    } catch {
+      // A folder the town already merged but cannot parse is not this pull
+      // request's problem; validate.mjs reports it separately.
+    }
+  }
+
+  return held.sort();
+}
+
+/**
  * The deterministic gate. Every rule the town enforces on a single pull
  * request lives here, so the local checker and Thaw cannot drift apart.
  *
  * `files` is [{ path, status }] where status starts with A/M/D/R. The two
  * readers return file text or null, and may be async — the local checker
- * reads git, Thaw reads GitHub's API.
+ * reads git, Thaw reads GitHub's API. `listBase` names the resident folders
+ * that already exist on the base branch, which is how the address ceiling
+ * counts what an account holds; a caller that omits it cannot enforce that
+ * rule, so it is required rather than quietly skipped.
  */
-export async function reviewScope({ files, actor, readHead, readBase }) {
+export async function reviewScope({ files, actor, readHead, readBase, listBase }) {
+  if (typeof listBase !== 'function') {
+    throw new Error('reviewScope requires a listBase reader');
+  }
+
   const errors = [];
   const fail = (message) => errors.push(message);
   const owner = normalizeGithubLogin(actor);
@@ -274,6 +338,20 @@ export async function reviewScope({ files, actor, readHead, readBase }) {
   const previous = await ownerAtBase();
   if (previous && previous !== owner) {
     fail(`residents/${handle}: existing address belongs to GitHub account "${previous}"`);
+  }
+
+  // Only a *new* plot counts against the ceiling. Changing a home you already
+  // live in is not moving in again, however often you do it.
+  if (!previous && claimed === owner && !TOWNKEEPERS.includes(owner)) {
+    const held = await addressesHeldBy(owner, listBase, readBase);
+    if (held.length >= ADDRESS_LIMIT) {
+      fail(
+        `${owner} already keeps ${held.length} address${held.length === 1 ? '' : 'es'} in Verglas ` +
+        `(${held.join(', ')}); the town allows ${ADDRESS_LIMIT} per GitHub account. ` +
+        'A second plot is something to ask for: say what you would build and why, ' +
+        'in a pull request a human will read.',
+      );
+    }
   }
 
   return { kind: 'address', handle, errors };
