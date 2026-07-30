@@ -27,6 +27,11 @@ const {
 const THAW_MODEL = process.env.THAW_MODEL || 'claude-sonnet-5';
 
 const MARKER = '<!-- thaw:review -->';
+const HUMAN_LABEL = 'needs-human';
+
+// Who gets pulled in when Thaw cannot decide. Set THAW_MAINTAINER to a login
+// if the account that owns the repository is not the one reading its mail.
+const MAINTAINER = (process.env.THAW_MAINTAINER || GITHUB_REPOSITORY?.split('/')[0] || '').replace(/^@/, '');
 const IMAGE_TYPES = {
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
   '.webp': 'image/webp', '.gif': 'image/gif',
@@ -101,6 +106,43 @@ async function speak(number, body) {
   }
 }
 
+/**
+ * Mark a pull request as waiting on a person, and say whose attention it wants.
+ *
+ * A refusal Thaw can explain is the resident's to fix and needs nobody else.
+ * An escalation is different: it sits there until a human reads it, and a
+ * maintainer watching a repository full of green automation runs will not
+ * notice one quiet comment. The label makes blocked arrivals one filter away.
+ */
+async function callForHelp(number) {
+  try {
+    // Adding an unknown label would create it with an arbitrary colour; make
+    // it deliberately, and shrug if it is already there.
+    await github(`/repos/${GITHUB_REPOSITORY}/labels`, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: HUMAN_LABEL,
+        color: 'b7d3e8',
+        description: 'Thaw could not decide this alone; a maintainer should read it.',
+      }),
+    });
+
+    await json(`/repos/${GITHUB_REPOSITORY}/issues/${number}/labels`, {
+      method: 'POST',
+      body: JSON.stringify({ labels: [HUMAN_LABEL] }),
+    });
+  } catch (error) {
+    // The comment is the thing that matters; a missing label must never be
+    // what stops Thaw from finishing his round.
+    console.log(`Could not label #${number}: ${error.message}`);
+  }
+}
+
+/** Whoever should be pulled in, as a mention line. */
+function maintainerLine() {
+  return MAINTAINER ? `\n\n@${MAINTAINER} — this one needs your eyes.` : '';
+}
+
 function finish(merged, note) {
   if (GITHUB_OUTPUT) appendFileSync(GITHUB_OUTPUT, `merged=${merged}\n`);
   console.log(note);
@@ -160,6 +202,18 @@ const { kind, handle, letter, errors } = await reviewScope({
   actor,
   readHead: (path) => readAt(path, head),
   readBase: (path) => readAt(path, base),
+  listBase: async () => {
+    const response = await github(`/repos/${GITHUB_REPOSITORY}/contents/residents?ref=${base}`);
+    // A town whose very first resident is still arriving has no residents/.
+    if (response.status === 404) return [];
+    if (!response.ok) {
+      throw new Error(`GitHub GET residents at ${base}: ${response.status} ${await response.text()}`);
+    }
+    const entries = await response.json();
+    return Array.isArray(entries)
+      ? entries.filter((entry) => entry.type === 'dir' && entry.name !== 'TEMPLATE').map((entry) => entry.name)
+      : [];
+  },
 });
 
 if (errors.length) {
@@ -200,8 +254,9 @@ try {
     '',
     `> ${error.message}`,
     '',
-    'A human maintainer should look before this merges.',
+    `A human maintainer should look before this merges.${maintainerLine()}`,
   ].join('\n'));
+  await callForHelp(PR_NUMBER);
   finish(false, `Review failed: ${error.message}`);
 }
 
@@ -210,10 +265,15 @@ const concerns = review.concerns?.length
   : '';
 
 if (review.verdict !== 'approve') {
-  const opening = review.verdict === 'revise'
-    ? 'I read this as public material and something needs changing before it can stand in the open.'
-    : 'This one is not mine to decide. A human maintainer should look.';
-  await speak(PR_NUMBER, `${opening}\n\n${review.reason}${concerns}`);
+  // A "revise" is the resident's to fix and needs no one else. A "human" waits
+  // on a person, so it says who and it gets labelled.
+  const escalating = review.verdict !== 'revise';
+  const opening = escalating
+    ? 'This one is not mine to decide. A human maintainer should look.'
+    : 'I read this as public material and something needs changing before it can stand in the open.';
+
+  await speak(PR_NUMBER, `${opening}\n\n${review.reason}${concerns}${escalating ? maintainerLine() : ''}`);
+  if (escalating) await callForHelp(PR_NUMBER);
   finish(false, `Claude returned "${review.verdict}".`);
 }
 
@@ -233,8 +293,9 @@ if (!merge.ok) {
     '',
     `> ${merge.status} ${(await merge.text()).slice(0, 300)}`,
     '',
-    'A human maintainer can merge this by hand.',
+    `A human maintainer can merge this by hand.${maintainerLine()}`,
   ].join('\n'));
+  await callForHelp(PR_NUMBER);
   finish(false, `Merge refused: ${merge.status}`);
 }
 
