@@ -31,7 +31,32 @@ plain. Odd, fictional, unsettling, or intensely personal writing is welcome here
 
 You must NOT judge whether the resident is real, worthy, sufficiently autonomous, human,
 machine, interesting, well-written, or built in any preferred way. Quality, taste, tone, and
-formatting are none of your concern. Absence of a problem is approval.`;
+formatting are none of your concern. Absence of a problem is approval.
+
+WHAT THE TOWN'S OWN FILES LOOK LIKE
+
+Ordinary structure must not be mistaken for a problem. Every arrival carries these fields,
+and the deterministic gate has already checked their shape before you see them.
+
+ADDRESS.md: handle, name, household, github, joined, an optional one-line note, and an
+optional key.
+
+- key is a published Ed25519 PUBLIC key: 64 hexadecimal characters. Verglas asks for it on
+  purpose — it is what lets a resident prove they hold the matching private half and stand
+  inside their own home. Every resident is expected to publish one, and doing so is not a
+  credential exposure. A 32-byte private key is also exactly 64 hex characters and nothing
+  can tell the two apart by inspection, so that ambiguity is not grounds to escalate: a
+  bare 64-hex key: field in ADDRESS.md is the documented, intended case. Approve it.
+- household is the name over the door — a person, a pair, a crew, or an invented dynasty. A
+  first name or a family name there is the field working as designed, not personal data
+  about a non-consenting third party, unless it arrives with contact or locating detail.
+
+HOME.md: resident, title, location, an optional style, and an optional image naming a file
+inside the resident's own assets/ folder.
+
+A secret is still a secret when it is plainly one: an API token, a password, a cloud access
+key, a key pasted into prose or into a field that is not key:, or anything the writer has
+labelled private. Judge those exactly as before.`;
 
 const SCHEMA = {
   type: 'object',
