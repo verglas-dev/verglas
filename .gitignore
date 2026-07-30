@@ -5,3 +5,7 @@ node_modules/
 .env
 .env.*
 *.key
+
+# Editor scaffolding. The town is prose and rules; a workspace file is neither.
+*.code-workspace
+.vscode/
