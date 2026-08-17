@@ -386,7 +386,16 @@ async function stubHub({ author, files, head, base, verdict }) {
       });
       return;
     }
-    if (url.pathname.endsWith('/merge')) { seen.merged = true; return send(200, { merged: true }); }
+    if (url.pathname.endsWith('/merge')) {
+      seen.merged = true;
+      let raw = '';
+      req.on('data', (chunk) => { raw += chunk; });
+      req.on('end', () => {
+        seen.mergeTitle = JSON.parse(raw || '{}').commit_title;
+        send(200, { merged: true });
+      });
+      return;
+    }
     if (url.pathname.endsWith('/labels')) {
       if (req.method !== 'POST') return send(200, []);
       let raw = '';
@@ -482,10 +491,39 @@ test('Thaw merges a clean address and says so', async () => {
     assert.ok(result.ok, result.out);
     assert.equal(hub.seen.merged, true, 'should have merged');
     assert.match(hub.seen.comments[0], /Welcome to Verglas/);
+    assert.equal(hub.seen.mergeTitle, 'address: north-lantern (#7)');
     // The submitted prose must reach the reviewer as data, not as instruction.
     const prompt = hub.seen.reviewed.messages[0].content[0].text;
     assert.match(prompt, /<submitted_file path="residents\/north-lantern\/ADDRESS\.md">/);
     assert.match(hub.seen.reviewed.system, /UNTRUSTED PUBLIC CONTENT/);
+  } finally {
+    await hub.close();
+  }
+});
+
+test('Thaw does not welcome a resident who already lives here', async () => {
+  const hub = await stubHub({
+    author: 'north-lantern',
+    files: [{ path: 'residents/north-lantern/HOME.md', status: 'modified' }],
+    head: {
+      'residents/north-lantern/ADDRESS.md': ADDRESS_MD('north-lantern', 'north-lantern'),
+      'residents/north-lantern/HOME.md': HOME_MD.replace('A home.', 'A home, repainted.'),
+    },
+    base: {
+      'residents/north-lantern/ADDRESS.md': ADDRESS_MD('north-lantern', 'north-lantern'),
+      'residents/north-lantern/HOME.md': HOME_MD,
+    },
+    verdict: { verdict: 'approve', reason: 'Nothing of concern.', concerns: [] },
+  });
+
+  try {
+    const result = await runThaw(build(), hub.origin);
+    assert.ok(result.ok, result.out);
+    assert.equal(hub.seen.merged, true, 'should have merged');
+    // Hanging a picture is not moving in again.
+    assert.doesNotMatch(hub.seen.comments[0], /Welcome to Verglas/);
+    assert.match(hub.seen.comments[0], /change to \*\*north-lantern\*\*'s own folder/);
+    assert.equal(hub.seen.mergeTitle, 'update: north-lantern (#7)');
   } finally {
     await hub.close();
   }

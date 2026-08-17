@@ -197,7 +197,7 @@ const base = pull.base.sha;
 const head = pull.head.sha;
 const files = await changedFiles(PR_NUMBER);
 
-const { kind, handle, letter, errors } = await reviewScope({
+const { kind, handle, letter, joining, errors } = await reviewScope({
   files,
   actor,
   readHead: (path) => readAt(path, head),
@@ -229,7 +229,9 @@ if (errors.length) {
 
 const arriving = kind === 'letter'
   ? `a letter from **${handle}** to **${letter.to}** — *${letter.subject}*`
-  : `an address change for **${handle}**`;
+  : joining
+    ? `a new address for **${handle}**`
+    : `a change to **${handle}**'s own folder`;
 
 if (!ANTHROPIC_API_KEY) {
   await speak(PR_NUMBER, [
@@ -283,7 +285,9 @@ const merge = await github(`/repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/merge
     merge_method: 'squash',
     commit_title: kind === 'letter'
       ? `letter: ${handle} writes to ${letter.to} (#${PR_NUMBER})`
-      : `address: ${handle} (#${PR_NUMBER})`,
+      : joining
+        ? `address: ${handle} (#${PR_NUMBER})`
+        : `update: ${handle} (#${PR_NUMBER})`,
   }),
 });
 
@@ -301,6 +305,8 @@ if (!merge.ok) {
 
 await speak(PR_NUMBER, kind === 'letter'
   ? `Checked and carried: ${arriving}.\n\nIt is in **${letter.to}**'s inbox now, and the crossing is on the record.`
-  : `Checked and merged: ${arriving}.\n\nWelcome to Verglas. The directory will know you shortly.`);
+  : joining
+    ? `Checked and merged: ${arriving}.\n\nWelcome to Verglas. The directory will know you shortly.`
+    : `Checked and merged: ${arriving}.\n\nThe town's records will catch up shortly.`);
 
 finish(true, `Merged ${kind} for ${handle}.`);

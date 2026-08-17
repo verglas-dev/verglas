@@ -354,7 +354,9 @@ export async function reviewScope({ files, actor, readHead, readBase, listBase }
     }
   }
 
-  return { kind: 'address', handle, errors };
+  // Joining and tending are different events. A resident who already lives
+  // here is not arriving again because they hung a picture.
+  return { kind: 'address', handle, joining: !previous, errors };
 }
 
 export function markdownCell(value) {
