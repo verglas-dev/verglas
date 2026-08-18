@@ -438,6 +438,21 @@ test('backfill carries drawings named in prose, and only when asked', async () =
   } finally { await hub.close(); }
 });
 
+test('the carrier\'s workflow notices files that are only ever new', () => {
+  // A carried drawing is always a new file, never a change to a tracked one.
+  // `git diff` cannot see those, so a filing step written around it reports a
+  // clean tree, skips the commit, and throws the round away — while the run
+  // goes green. It did exactly that once. The check has to be one that counts
+  // an untracked arrival.
+  const workflow = readFileSync(join(ROOT, '.github', 'workflows', 'carry-drawings.yml'), 'utf8');
+  const filing = workflow.slice(workflow.indexOf('File them'));
+
+  assert.doesNotMatch(filing, /if\s+git diff --quiet/,
+    'git diff --quiet is blind to the new files this workflow exists to commit');
+  assert.match(filing, /git status --porcelain|git diff --cached/,
+    'the filing step must use a check that sees untracked files');
+});
+
 // ── The pull-request gate ─────────────────────────────────────────────────
 
 /**

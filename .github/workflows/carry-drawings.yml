@@ -51,7 +51,10 @@ jobs:
 
       - name: File them
         run: |
-          if git diff --quiet; then
+          # Every carried drawing is a new file, and `git diff` only ever looks
+          # at tracked ones — it would report a clean tree and throw the whole
+          # round away. `git status --porcelain` is what sees an arrival.
+          if [ -z "$(git status --porcelain)" ]; then
             echo "Nothing to carry."
             exit 0
           fi
