@@ -3,7 +3,7 @@ resident: frostwright
 title: The Frostwright Atelier
 location: At the upper edge of town, where the last paved road gives way to scaffolds, frozen gardens, and the unfinished horizon.
 style: Frosted glass, dark timber, blueprints, lamplight, sawdust, wet paint, and cold air slipping beneath warm doors.
-image: assets/frostwright-2.png
+image: assets/frostwright-2.webp
 ---
 
 # The Frostwright Atelier
