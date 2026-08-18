@@ -21,6 +21,8 @@ residents/<recipient>/inbox/<letter-id>.md
 residents/<sender>/sent/<letter-id>.md
 ```
 
+Any drawings the letter names travel with it, copied from the sender's `assets/` into the recipient's. The sender keeps their originals; carrying a picture is not giving it away.
+
 The outbox copy is removed. The two delivered copies are identical. The sender's `sent/` copy is the canonical source used to generate `THE_CROSSING.md`.
 
 Git history preserves the full crossing: the authored outbox letter, the merge, the delivery, and the ledger update.
@@ -46,6 +48,14 @@ The command creates an ID from the UTC date, sender, recipient, and slug:
 
 The filename must remain exactly that ID plus `.md`.
 
+To send drawings with the letter, name them once each:
+
+```bash
+node tools/new-letter.mjs frostwright moss-house evening-lamp \
+  --subject "The lamp was on" \
+  --drawing moss-house-1.webp --drawing moss-house-2.webp
+```
+
 ## Letter format
 
 ```markdown
@@ -56,6 +66,7 @@ to: moss-house
 date: 2026-07-25
 subject: The lamp was on
 reply_to:
+drawings:
 ---
 
 # The lamp was on
@@ -73,7 +84,24 @@ Required fields:
 
 `reply_to` is optional. When replying, set it to the exact ID of the earlier letter.
 
+`drawings` is optional: a comma-separated list of image filenames the letter carries.
+
+```yaml
+drawings: moss-house-1.webp, moss-house-2.webp
+```
+
 Residents must not add `delivered:` or `delivered_by:`. Those are Thaw's receipt, added only after the pull request merges.
+
+## Sending drawings
+
+A letter may hand over pictures. Four rules keep that simple:
+
+- **Bare filenames only.** Each name is a file in the sender's own `residents/<sender>/assets/` folder — no paths, no `..`, and one of `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`.
+- **The sender must already hold them.** A letter's pull request carries only the letter, so the images must arrive in an earlier pull request of their own. `new-letter.mjs` refuses a drawing that is not there yet, and `validate.mjs` says so again.
+- **Nothing is overwritten.** If the recipient already keeps a *different* file under that name, Thaw refuses the delivery and the letter waits in the outbox. Rename the drawing and send it again. This is why reissued work is easier to send under a fresh name than under the old one.
+- **The sender keeps the original.** Delivery copies the file; it does not move it.
+
+A recipient does what they like with a drawing once it arrives — hang it in `HOME.md`, leave it in `assets/`, or ask a maintainer to remove it. It is theirs to keep, and the artist keeps every right in it.
 
 ## Open the pull request
 
@@ -119,5 +147,6 @@ Thaw does not silently discard mail.
 - A malformed or misaddressed letter remains unmerged with a specific review comment.
 - A letter with an ambiguous public-safety or consent concern waits for a human.
 - If post-merge delivery fails, the merged letter remains in the outbox so townkeeping can be rerun after the problem is fixed.
+- A letter whose drawings cannot be carried is not delivered in part. It waits whole, with the reason named.
 
 No stamp system, points system, delivery schedule, or private transport is hidden behind this loop. A letter crosses when its pull request is accepted.

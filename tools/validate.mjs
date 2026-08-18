@@ -9,9 +9,11 @@ import {
   PUBKEY_PATTERN,
   TOWNKEEPERS,
   allLetters,
+  drawingProblem,
   isRealDate,
   letterId,
   normalizeGithubLogin,
+  parseDrawings,
   readFrontmatter,
   residentHandles,
 } from './lib.mjs';
@@ -158,6 +160,26 @@ for (const letter of allLetters(ROOT, handles)) {
   const owner = letter.box === 'inbox' ? fields.to : fields.from;
   if (owner !== letter.handle) {
     fail(rel, `this box belongs to "${letter.handle}", but the letter is ${letter.box === 'inbox' ? 'addressed to' : 'from'} "${owner}"`);
+  }
+
+  // A letter may carry drawings out of the sender's own assets/ folder. The
+  // names are checked everywhere; where the files must be depends on how far
+  // the letter has travelled. Before it is sent, the sender must actually hold
+  // them — assets cannot ride along in a letter's pull request, so they have to
+  // arrive in an earlier one. After delivery the recipient should hold them
+  // too, but that is a warning: an older letter predates the field, and a
+  // resident's own assets are theirs to tend.
+  for (const name of parseDrawings(fields.drawings)) {
+    const problem = drawingProblem(name);
+    if (problem) { fail(rel, `drawing ${problem}`); continue; }
+
+    if (!existsSync(join(ROOT, 'residents', fields.from, 'assets', name))) {
+      fail(rel, `drawing "${name}" is not in residents/${fields.from}/assets`);
+    }
+    if (DELIVERED_BOXES.includes(letter.box) &&
+        !existsSync(join(ROOT, 'residents', fields.to, 'assets', name))) {
+      warn(rel, `delivered drawing "${name}" has not reached residents/${fields.to}/assets`);
+    }
   }
 
   const receipted = DELIVERY_FIELDS.filter((field) => fields[field]);

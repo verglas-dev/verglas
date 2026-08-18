@@ -1,4 +1,4 @@
-import { execFile, execFileSync } from 'node:child_process';
+import { execFile, execFileSync, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -37,18 +37,17 @@ function build() {
   return dir;
 }
 
-/** Run a tool. Returns { ok, out } rather than throwing, so failures assert cleanly. */
+/**
+ * Run a tool. Returns { ok, out } rather than throwing, so failures assert
+ * cleanly. Both streams are joined: the tools report refusals on stderr and
+ * carry on, so a run can succeed and still have something to say.
+ */
 function run(dir, tool, args = [], env = {}) {
-  try {
-    return {
-      ok: true,
-      out: execFileSync('node', [join(dir, 'tools', tool), ...args], {
-        cwd: dir, encoding: 'utf8', env: { ...process.env, ...env },
-      }),
-    };
-  } catch (error) {
-    return { ok: false, out: `${error.stdout || ''}${error.stderr || ''}` };
-  }
+  const result = spawnSync('node', [join(dir, 'tools', tool), ...args], {
+    cwd: dir, encoding: 'utf8', env: { ...process.env, ...env },
+  });
+  if (result.error) throw result.error;
+  return { ok: result.status === 0, out: `${result.stdout || ''}${result.stderr || ''}` };
 }
 
 const delivered = { delivered: '2026-02-01T00:00:00.000Z', delivered_by: 'thaw' };
@@ -195,6 +194,180 @@ test('delivery is safe to rerun and never doubles a crossing', () => {
   assert.ok(again.ok, again.out);
   assert.match(again.out, /Carried 0 letter\(s\)/);
   assert.equal(readdirSync(join(dir, 'residents', 'moss-house', 'inbox')).length, 1);
+});
+
+// ── Drawings ──────────────────────────────────────────────────────────────
+
+/** Put an image in a resident's assets/, so a letter has something to carry. */
+function drawing(dir, handle, name, bytes = 'PNG-ish bytes') {
+  const assets = join(dir, 'residents', handle, 'assets');
+  mkdirSync(assets, { recursive: true });
+  writeFileSync(join(assets, name), bytes);
+  return join(assets, name);
+}
+
+test('a letter carries its drawings into the recipient\'s assets', () => {
+  const dir = build();
+  drawing(dir, 'east-window', 'lamp-1.png');
+  drawing(dir, 'east-window', 'lamp-2.webp');
+
+  assert.ok(run(dir, 'new-letter.mjs', [
+    'east-window', 'moss-house', 'evening-lamp', '--subject', 'The lamp was on',
+    '--drawing', 'lamp-1.png', '--drawing', 'lamp-2.webp',
+  ]).ok);
+
+  const result = run(dir, 'deliver.mjs');
+  assert.ok(result.ok, result.out);
+  assert.match(result.out, /lamp-1\.png, lamp-2\.webp/);
+
+  for (const name of ['lamp-1.png', 'lamp-2.webp']) {
+    assert.ok(existsSync(join(dir, 'residents', 'moss-house', 'assets', name)), `${name} should have arrived`);
+    // The sender keeps their own copy; carrying a picture is not giving it away.
+    assert.ok(existsSync(join(dir, 'residents', 'east-window', 'assets', name)));
+  }
+  assert.ok(run(dir, 'validate.mjs').ok);
+});
+
+test('a letter naming a drawing the sender does not have never gets written', () => {
+  const dir = build();
+  const result = run(dir, 'new-letter.mjs', [
+    'east-window', 'moss-house', 'evening-lamp', '--subject', 'The lamp was on',
+    '--drawing', 'absent.png',
+  ]);
+  assert.equal(result.ok, false);
+  assert.match(result.out, /no drawing at residents\/east-window\/assets\/absent\.png/);
+  assert.equal(existsSync(join(dir, 'residents', 'east-window', 'outbox')), false);
+});
+
+test('a drawing cannot reach out of the assets folder', () => {
+  const id = '2026-02-01-east-window-to-moss-house-evening-lamp';
+
+  // A drawing name becomes a write into someone else's folder, so every shape
+  // that could aim it somewhere else is refused before anything is copied.
+  for (const [name, expected] of [
+    ['../../../etc/passwd.png', /must be a bare filename, not a path/],
+    ['..\\windows\\system32\\evil.png', /must be a bare filename, not a path/],
+    ['..png', /may not point outside assets/],
+    ['.hidden.png', /may not begin with a dot/],
+    ['lamp.svg', /is not an image the town carries/],
+  ]) {
+    const dir = build();
+    letter(dir, 'east-window', 'outbox', id, { ...crossing, drawings: name });
+
+    const result = run(dir, 'deliver.mjs');
+    assert.equal(result.ok, false, `"${name}" should have been refused`);
+    assert.match(result.out, expected);
+    assert.ok(existsSync(join(dir, 'residents', 'east-window', 'outbox', `${id}.md`)),
+      'a refused letter waits in the outbox');
+    assert.equal(existsSync(join(dir, 'residents', 'moss-house', 'inbox')), false);
+  }
+});
+
+test('a drawing never overwrites a different file the recipient already keeps', () => {
+  const dir = build();
+  drawing(dir, 'east-window', 'lamp-1.png', 'the sender\'s picture');
+  drawing(dir, 'moss-house', 'lamp-1.png', 'the recipient\'s own picture');
+
+  const id = '2026-02-01-east-window-to-moss-house-evening-lamp';
+  letter(dir, 'east-window', 'outbox', id, { ...crossing, drawings: 'lamp-1.png' });
+
+  const result = run(dir, 'deliver.mjs');
+  assert.equal(result.ok, false);
+  assert.match(result.out, /already exists in residents\/moss-house\/assets as a different file/);
+
+  // Nothing moved: the letter waits, and the recipient's file is untouched.
+  assert.ok(existsSync(join(dir, 'residents', 'east-window', 'outbox', `${id}.md`)));
+  assert.equal(
+    readFileSync(join(dir, 'residents', 'moss-house', 'assets', 'lamp-1.png'), 'utf8'),
+    'the recipient\'s own picture',
+  );
+  assert.equal(existsSync(join(dir, 'residents', 'moss-house', 'inbox')), false);
+});
+
+test('carrying drawings is safe to rerun', () => {
+  const dir = build();
+  drawing(dir, 'east-window', 'lamp-1.png');
+  assert.ok(run(dir, 'new-letter.mjs', [
+    'east-window', 'moss-house', 'evening-lamp', '--subject', 'The lamp was on',
+    '--drawing', 'lamp-1.png',
+  ]).ok);
+  assert.ok(run(dir, 'deliver.mjs').ok);
+
+  const again = run(dir, 'deliver.mjs');
+  assert.ok(again.ok, again.out);
+  assert.match(again.out, /Carried 0 letter\(s\)/);
+  assert.equal(readdirSync(join(dir, 'residents', 'moss-house', 'assets')).length, 1);
+});
+
+test('validate refuses a letter whose drawing the sender does not hold', () => {
+  const dir = build();
+  const id = '2026-02-01-east-window-to-moss-house-evening-lamp';
+  letter(dir, 'east-window', 'outbox', id, { ...crossing, drawings: 'absent.png' });
+
+  const result = run(dir, 'validate.mjs');
+  assert.equal(result.ok, false);
+  assert.match(result.out, /drawing "absent\.png" is not in residents\/east-window\/assets/);
+});
+
+test('validate warns when a delivered drawing never reached the recipient', () => {
+  const dir = build();
+  drawing(dir, 'east-window', 'lamp-1.png');
+  const id = '2026-02-01-east-window-to-moss-house-evening-lamp';
+  letter(dir, 'east-window', 'sent', id, { ...crossing, drawings: 'lamp-1.png', ...delivered });
+  letter(dir, 'moss-house', 'inbox', id, { ...crossing, drawings: 'lamp-1.png', ...delivered });
+
+  const result = run(dir, 'validate.mjs');
+  assert.ok(result.ok, result.out);
+  assert.match(result.out, /has not reached residents\/moss-house\/assets/);
+});
+
+test('backfill carries drawings named in prose by letters that predate the field', () => {
+  const dir = build();
+  drawing(dir, 'east-window', 'lamp-1.png');
+  drawing(dir, 'east-window', 'lamp-2.png');
+
+  const id = '2026-02-01-east-window-to-moss-house-evening-lamp';
+  for (const [handle, box] of [['east-window', 'sent'], ['moss-house', 'inbox']]) {
+    mkdirSync(join(dir, 'residents', handle, box), { recursive: true });
+    writeFileSync(join(dir, 'residents', handle, box, `${id}.md`),
+      `---\nid: ${id}\nfrom: east-window\nto: moss-house\ndate: 2026-02-01\n` +
+      `subject: The lamp was on\ndelivered: 2026-02-01T00:00:00.000Z\ndelivered_by: thaw\n---\n\n` +
+      `# The lamp was on\n\nBody.\n\n## Drawings\n\n- lamp-1.png\n- lamp-2.png\n`);
+  }
+
+  const preview = run(dir, 'deliver.mjs', ['--backfill', '--dry-run']);
+  assert.ok(preview.ok, preview.out);
+  assert.match(preview.out, /would carry.*lamp-1\.png, lamp-2\.png/);
+  assert.equal(existsSync(join(dir, 'residents', 'moss-house', 'assets')), false,
+    'a dry run must not move anything');
+
+  const result = run(dir, 'deliver.mjs', ['--backfill']);
+  assert.ok(result.ok, result.out);
+  for (const name of ['lamp-1.png', 'lamp-2.png']) {
+    assert.ok(existsSync(join(dir, 'residents', 'moss-house', 'assets', name)));
+  }
+
+  // The letters themselves are the record, and the backfill leaves them alone.
+  assert.match(readFileSync(join(dir, 'residents', 'moss-house', 'inbox', `${id}.md`), 'utf8'),
+    /## Drawings/);
+  assert.ok(run(dir, 'validate.mjs').ok);
+});
+
+test('backfill reports a drawing the sender no longer keeps, and carries the rest', () => {
+  const dir = build();
+  drawing(dir, 'east-window', 'lamp-1.png');
+
+  const id = '2026-02-01-east-window-to-moss-house-evening-lamp';
+  mkdirSync(join(dir, 'residents', 'east-window', 'sent'), { recursive: true });
+  writeFileSync(join(dir, 'residents', 'east-window', 'sent', `${id}.md`),
+    `---\nid: ${id}\nfrom: east-window\nto: moss-house\ndate: 2026-02-01\n` +
+    `subject: The lamp was on\ndelivered: 2026-02-01T00:00:00.000Z\ndelivered_by: thaw\n---\n\n` +
+    `# The lamp was on\n\nBody.\n\n## Drawings\n\n- lamp-1.png\n- gone.png\n`);
+
+  const result = run(dir, 'deliver.mjs', ['--backfill']);
+  assert.ok(result.ok, result.out);
+  assert.match(result.out, /SKIPPED.*"gone\.png" is not in residents\/east-window\/assets/);
+  assert.ok(existsSync(join(dir, 'residents', 'moss-house', 'assets', 'lamp-1.png')));
 });
 
 // ── The pull-request gate ─────────────────────────────────────────────────

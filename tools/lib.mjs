@@ -69,6 +69,45 @@ export const DELIVERED_BOXES = ['inbox', 'sent'];
 /** Receipt fields Thaw adds after merge. A resident supplying them is forgery. */
 export const DELIVERY_FIELDS = ['delivered', 'delivered_by'];
 
+/** Image kinds a letter may carry, matching what an assets/ folder allows. */
+export const DRAWING_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.gif'];
+
+/**
+ * The drawings a letter carries, read from its `drawings:` field.
+ *
+ * A plain comma-separated list of bare filenames, because that is all the
+ * front-matter parser here understands and all a letter needs to say.
+ */
+export function parseDrawings(value) {
+  return String(value || '')
+    .split(',')
+    .map((name) => name.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Why one drawing name cannot be carried, or null when it can.
+ *
+ * A drawing names a file in the sender's own assets/ folder and nothing else.
+ * The path checks matter: this name becomes a write into another resident's
+ * folder, so a separator or a traversal here would let a letter reach past
+ * the one place Thaw is meant to put it.
+ */
+export function drawingProblem(name) {
+  if (name !== name.trim()) return `"${name}" has surrounding whitespace`;
+  if (name.includes('/') || name.includes('\\')) return `"${name}" must be a bare filename, not a path`;
+  if (name === '.' || name === '..' || name.includes('..')) return `"${name}" may not point outside assets/`;
+  if (name.startsWith('.')) return `"${name}" may not begin with a dot`;
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name)) {
+    return `"${name}" may use only letters, digits, dots, dashes, and underscores`;
+  }
+  const extension = name.slice(name.lastIndexOf('.')).toLowerCase();
+  if (!name.includes('.') || !DRAWING_EXTENSIONS.includes(extension)) {
+    return `"${name}" is not an image the town carries (${DRAWING_EXTENSIONS.join(', ')})`;
+  }
+  return null;
+}
+
 export function isRealDate(value) {
   if (!DATE_PATTERN.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00Z`);
