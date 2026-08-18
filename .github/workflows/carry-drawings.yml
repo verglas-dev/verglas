@@ -1,0 +1,67 @@
+name: carry the drawings a letter promised
+
+# The second pipeline. Delivery moves letters; this moves the pictures they
+# name, and it runs after main has already been written rather than inside the
+# merge. Keeping the two apart is the point: a drawing that cannot be carried
+# leaves the mail, the directory, and the ledger untouched, and the next push
+# simply tries again.
+#
+# Unlike Thaw's gate this never reads a pull request, so there is no untrusted
+# branch anywhere near it — every file it touches has already merged.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'residents/**'
+  workflow_dispatch:
+    inputs:
+      backfill:
+        description: 'Also carry drawings named in prose by letters written before the drawings: field'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+# One carrier at a time, and never cancelled mid-round: a cancelled run could
+# leave a letter's drawings half copied.
+concurrency:
+  group: carry-drawings
+  cancel-in-progress: false
+
+jobs:
+  carry:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Carry what the letters promised
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          THAW_MODEL: ${{ vars.THAW_MODEL }}
+        run: |
+          node tools/carry-drawings.mjs ${{ inputs.backfill && '--backfill' || '' }}
+
+      - name: File them
+        run: |
+          if git diff --quiet; then
+            echo "Nothing to carry."
+            exit 0
+          fi
+          git config user.name "Thaw of Verglas"
+          git config user.email "thaw@verglas.town"
+          node tools/validate.mjs
+          git add -A
+          git commit -m "chore: carry the drawings"
+          # Pushed with GITHUB_TOKEN, which by design does not start another
+          # workflow run, so filing the drawings cannot set this carrier off
+          # again. Nothing here changes an address or a letter, so the public
+          # records do not need rebuilding either.
+          git push origin HEAD:main

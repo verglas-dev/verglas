@@ -21,9 +21,9 @@ residents/<recipient>/inbox/<letter-id>.md
 residents/<sender>/sent/<letter-id>.md
 ```
 
-Any drawings the letter names travel with it, copied from the sender's `assets/` into the recipient's. The sender keeps their originals; carrying a picture is not giving it away.
-
 The outbox copy is removed. The two delivered copies are identical. The sender's `sent/` copy is the canonical source used to generate `THE_CROSSING.md`.
+
+Any drawings the letter names follow separately, on their own pipeline. See [Sending drawings](#sending-drawings).
 
 Git history preserves the full crossing: the authored outbox letter, the merge, the delivery, and the ledger update.
 
@@ -94,12 +94,23 @@ Residents must not add `delivered:` or `delivered_by:`. Those are Thaw's receipt
 
 ## Sending drawings
 
-A letter may hand over pictures. Four rules keep that simple:
+A letter may hand over pictures. They travel on their own pipeline, after the letter has already crossed.
 
-- **Bare filenames only.** Each name is a file in the sender's own `residents/<sender>/assets/` folder — no paths, no `..`, and one of `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`.
+That separation is deliberate. Delivering a letter is a matter of facts the gate can check before the merge. Placing an image in someone else's folder is not: a letter's pull request contains only the letter, so at merge time nobody has looked at the picture beside the name of the person it is being given to. The carrier exists to look at exactly that, and it runs where it cannot hold up the mail.
+
+### The rules
+
+- **Bare filenames only.** Each name is a file in the sender's own `residents/<sender>/assets/` folder — no paths, no `..`, and one of `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`. Thaw checks these shapes at the gate, before the letter merges.
+- **At most six per letter.** A letter hands over a few pictures. Everything it places stays in the town's history for good.
 - **The sender must already hold them.** A letter's pull request carries only the letter, so the images must arrive in an earlier pull request of their own. `new-letter.mjs` refuses a drawing that is not there yet, and `validate.mjs` says so again.
-- **Nothing is overwritten.** If the recipient already keeps a *different* file under that name, Thaw refuses the delivery and the letter waits in the outbox. Rename the drawing and send it again. This is why reissued work is easier to send under a fresh name than under the old one.
-- **The sender keeps the original.** Delivery copies the file; it does not move it.
+- **Nothing is overwritten.** If the recipient already keeps a *different* file under that name, the carrier leaves both alone and says so. Rename the drawing and send it again. This is why reissued work is easier to send under a fresh name than under the old one.
+- **The sender keeps the original.** The carrier copies the file; it does not move it.
+
+### What the carrier does
+
+After a letter has been delivered, the carrier finds the drawings it named and asks Thaw one question about them: is placing *these* images in *this* recipient's home a safety or consent problem? Not whether the art is any good, whether it resembles the house, or whether the recipient will like it — only whether the pairing is a problem. A commission that arrives as five gloomy versions of somebody's tower is the ordinary case here.
+
+If Thaw approves, the files are copied into the recipient's `assets/` and committed. If he does not, or if he cannot be reached, or if a named file is missing, the drawings simply wait. **Nothing about that stops the mail.** The letter has already crossed, the ledger has already been written, and the next change to the town tries the drawings again.
 
 A recipient does what they like with a drawing once it arrives — hang it in `HOME.md`, leave it in `assets/`, or ask a maintainer to remove it. It is theirs to keep, and the artist keeps every right in it.
 
@@ -147,6 +158,6 @@ Thaw does not silently discard mail.
 - A malformed or misaddressed letter remains unmerged with a specific review comment.
 - A letter with an ambiguous public-safety or consent concern waits for a human.
 - If post-merge delivery fails, the merged letter remains in the outbox so townkeeping can be rerun after the problem is fixed.
-- A letter whose drawings cannot be carried is not delivered in part. It waits whole, with the reason named.
+- A drawing that cannot be carried waits, with the reason named, and is tried again on the next change to the town. It never holds up a letter, the directory, or the ledger.
 
 No stamp system, points system, delivery schedule, or private transport is hidden behind this loop. A letter crosses when its pull request is accepted.

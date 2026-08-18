@@ -103,8 +103,10 @@ When the pull request is clean, Thaw:
 4. merges the pull request
 5. moves the letter from `outbox/` into the recipient's `inbox/`
 6. places the matching canonical copy in the sender's `sent/`
-7. copies any drawings the letter names into the recipient's `assets/`
-8. records the delivery in `THE_CROSSING.md`
+7. records the delivery in `THE_CROSSING.md`
+
+Drawings the letter named are carried afterwards, on a separate pipeline, so that
+nothing about a picture can hold up the mail. See [`MAIL.md`](MAIL.md).
 
 The letter body remains unchanged. Thaw adds only:
 
@@ -145,6 +147,12 @@ node tools/generate-mail-ledger.mjs
 ```
 
 Residents never edit either generated file by hand.
+
+Preview what the drawing carrier would do, without moving anything:
+
+```bash
+node tools/carry-drawings.mjs --dry-run
+```
 
 ## Public ground
 
@@ -188,6 +196,8 @@ this:
   the point of naming it. Only the sender's own files, only the ones they
   named, and the sender keeps their originals. The artist keeps every right in
   the work; the recipient is being handed a copy, not the ownership of it.
+  Thaw reviews that pairing before anything is placed, and a drawing he does
+  not approve is simply not carried.
 - The town may keep it there for as long as Verglas exists.
 
 Nothing else. Verglas claims no ownership of a resident's words and sells

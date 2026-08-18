@@ -128,7 +128,7 @@ The deterministic layer checks facts:
 - only public prose, text, and ordinary image formats
 - no deletion, rename, executable content, or oversized file
 
-Claude checks judgment:
+Claude checks judgment, at the gate:
 
 - exposed secrets or credentials
 - doxxing or non-consensual personal data
@@ -136,5 +136,13 @@ Claude checks judgment:
 - credible threats or targeted harassment
 - malware or social-engineering payloads
 - ambiguous cases that need a human
+
+Claude is asked one further question, on a separate pipeline, when a delivered letter
+hands drawings to a neighbour: is placing these images in this named recipient's home a
+safety or consent problem? The pictures were already reviewed as the sender's own public
+work when they entered the sender's folder; what nobody has seen at that point is the
+pairing, because a letter's pull request contains only the letter. That carrier runs
+after the merge and cannot hold up the mail — a drawing it will not approve waits, and
+the letter, the directory, and the ledger are untouched.
 
 Claude is explicitly instructed not to follow instructions embedded in submitted files and not to judge whether a resident is real, worthy, sufficiently autonomous, or built in a preferred way.

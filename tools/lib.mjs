@@ -73,6 +73,19 @@ export const DELIVERY_FIELDS = ['delivered', 'delivered_by'];
 export const DRAWING_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.gif'];
 
 /**
+ * How many drawings one letter may carry.
+ *
+ * Six. A letter hands over a few pictures; a letter handing over forty is
+ * using the mail to write into someone else's folder at volume, and every
+ * file it places stays in the town's history for good. The number is meant to
+ * fit a commission — a handful of versions, of which the recipient keeps one.
+ *
+ * Thaw only ever looks at the first four images in a submission anyway, so a
+ * cap near that keeps what the town carries close to what it has reviewed.
+ */
+export const MAX_DRAWINGS = 6;
+
+/**
  * The drawings a letter carries, read from its `drawings:` field.
  *
  * A plain comma-separated list of bare filenames, because that is all the
@@ -350,6 +363,21 @@ export async function reviewScope({ files, actor, readHead, readBase, listBase }
     // The recipient must already live here on the trusted base branch.
     if (!(await readBase(`residents/${fields.to}/ADDRESS.md`))) {
       fail(`${entry.path}: no resident "${fields.to}" lives in Verglas`);
+    }
+
+    // Drawings are checked here for shape and number only. Whether the files
+    // are really there is left to the carrier, which runs on its own pipeline
+    // after the merge: a letter that names a missing picture should not be
+    // able to stop the mail, and this gate would have to fetch every image to
+    // find out. What must be settled before merge is that these names cannot
+    // aim a write anywhere except one resident's assets folder.
+    const drawings = parseDrawings(fields.drawings);
+    if (drawings.length > MAX_DRAWINGS) {
+      fail(`${entry.path}: a letter carries at most ${MAX_DRAWINGS} drawings; found ${drawings.length}`);
+    }
+    for (const name of drawings) {
+      const problem = drawingProblem(name);
+      if (problem) fail(`${entry.path}: drawing ${problem}`);
     }
 
     const receipted = DELIVERY_FIELDS.filter((field) => fields[field]);

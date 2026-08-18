@@ -6,7 +6,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
-import { ADDRESS_LIMIT, TOWNKEEPERS } from './lib.mjs';
+import { ADDRESS_LIMIT, MAX_DRAWINGS, TOWNKEEPERS } from './lib.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const built = [];
@@ -203,29 +203,168 @@ function drawing(dir, handle, name, bytes = 'PNG-ish bytes') {
   const assets = join(dir, 'residents', handle, 'assets');
   mkdirSync(assets, { recursive: true });
   writeFileSync(join(assets, name), bytes);
-  return join(assets, name);
 }
 
-test('a letter carries its drawings into the recipient\'s assets', () => {
+/** Stands in for the review the carrier asks for before it copies anything. */
+async function stubReview(verdict = { verdict: 'approve', reason: 'Ordinary.', concerns: [] }) {
+  const seen = { asked: [] };
+  const server = createServer((req, res) => {
+    let raw = '';
+    req.on('data', (chunk) => { raw += chunk; });
+    req.on('end', () => {
+      seen.asked.push(JSON.parse(raw));
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(verdict) }] }));
+    });
+  });
+  await new Promise((ready) => server.listen(0, '127.0.0.1', ready));
+  return {
+    seen,
+    origin: `http://127.0.0.1:${server.address().port}`,
+    close: () => new Promise((done) => server.close(done)),
+  };
+}
+
+/** A crossing that has already happened, with drawings still to follow. */
+function alreadyDelivered(dir, names, body = '') {
+  const id = crossing.id;
+  const front = { ...crossing, drawings: names.join(', '), ...delivered };
+  for (const [handle, box] of [['east-window', 'sent'], ['moss-house', 'inbox']]) {
+    mkdirSync(join(dir, 'residents', handle, box), { recursive: true });
+    const lines = Object.entries(front).map(([key, value]) => `${key}: ${value}`).join('\n');
+    writeFileSync(join(dir, 'residents', handle, box, `${id}.md`),
+      `---\n${lines}\n---\n\n# The lamp was on\n\nBody.\n${body}`);
+  }
+  return id;
+}
+
+const carry = (dir, hub, args = []) =>
+  runAsync(dir, 'carry-drawings.mjs', args, { ANTHROPIC_API_KEY: 'stub', ANTHROPIC_BASE_URL: hub.origin });
+
+test('the carrier brings a delivered letter\'s drawings to the recipient', async () => {
   const dir = build();
   drawing(dir, 'east-window', 'lamp-1.png');
   drawing(dir, 'east-window', 'lamp-2.webp');
+  alreadyDelivered(dir, ['lamp-1.png', 'lamp-2.webp']);
 
+  const hub = await stubReview();
+  try {
+    const result = await carry(dir, hub);
+    assert.ok(result.ok, result.out);
+    assert.match(result.out, /lamp-1\.png, lamp-2\.webp/);
+
+    for (const name of ['lamp-1.png', 'lamp-2.webp']) {
+      assert.ok(existsSync(join(dir, 'residents', 'moss-house', 'assets', name)), `${name} should have arrived`);
+      // Carrying a picture is not giving it away.
+      assert.ok(existsSync(join(dir, 'residents', 'east-window', 'assets', name)));
+    }
+
+    // The pairing is what was judged: both homes named, and the images attached.
+    const asked = hub.seen.asked[0];
+    assert.match(asked.system, /placing THESE images into THIS named recipient/);
+    assert.match(asked.messages[0].content[0].text, /recipient: moss-house/);
+    assert.equal(asked.messages[0].content.filter((block) => block.type === 'image').length, 2);
+    assert.ok(run(dir, 'validate.mjs').ok);
+  } finally { await hub.close(); }
+});
+
+test('a drawing the review will not approve is left where it is', async () => {
+  const dir = build();
+  drawing(dir, 'east-window', 'lamp-1.png');
+  alreadyDelivered(dir, ['lamp-1.png']);
+
+  const hub = await stubReview({ verdict: 'revise', reason: 'Targets the recipient.', concerns: [] });
+  try {
+    const result = await carry(dir, hub);
+    // Not carried, and not a failure: the letter has already crossed.
+    assert.ok(result.ok, result.out);
+    assert.match(result.out, /WAITING.*review returned "revise" — Targets the recipient/);
+    assert.equal(existsSync(join(dir, 'residents', 'moss-house', 'assets')), false);
+  } finally { await hub.close(); }
+});
+
+test('the carrier does not carry when it cannot ask', async () => {
+  const dir = build();
+  drawing(dir, 'east-window', 'lamp-1.png');
+  alreadyDelivered(dir, ['lamp-1.png']);
+
+  // No key at all.
+  const bare = await runAsync(dir, 'carry-drawings.mjs', [], { ANTHROPIC_API_KEY: '' });
+  assert.ok(bare.ok, bare.out);
+  assert.match(bare.out, /no ANTHROPIC_API_KEY, so the pairing was not reviewed/);
+  assert.equal(existsSync(join(dir, 'residents', 'moss-house', 'assets')), false);
+
+  // A key, but nothing answering.
+  const unreachable = await runAsync(dir, 'carry-drawings.mjs', [],
+    { ANTHROPIC_API_KEY: 'stub', ANTHROPIC_BASE_URL: 'http://127.0.0.1:1' });
+  assert.ok(unreachable.ok, unreachable.out);
+  assert.match(unreachable.out, /the review could not be reached/);
+  assert.equal(existsSync(join(dir, 'residents', 'moss-house', 'assets')), false);
+});
+
+test('a drawing never overwrites a different file the recipient already keeps', async () => {
+  const dir = build();
+  drawing(dir, 'east-window', 'lamp-1.png', 'the sender\'s picture');
+  drawing(dir, 'moss-house', 'lamp-1.png', 'the recipient\'s own picture');
+  alreadyDelivered(dir, ['lamp-1.png']);
+
+  const hub = await stubReview();
+  try {
+    const result = await carry(dir, hub);
+    assert.ok(result.ok, result.out);
+    assert.match(result.out, /already exists in residents\/moss-house\/assets as a different file/);
+    assert.equal(
+      readFileSync(join(dir, 'residents', 'moss-house', 'assets', 'lamp-1.png'), 'utf8'),
+      'the recipient\'s own picture',
+    );
+    assert.equal(hub.seen.asked.length, 0, 'nothing to carry means nothing to ask about');
+  } finally { await hub.close(); }
+});
+
+test('a drawing the sender no longer keeps leaves everything else alone', async () => {
+  const dir = build();
+  drawing(dir, 'east-window', 'lamp-1.png');
+  alreadyDelivered(dir, ['lamp-1.png', 'gone.png']);
+
+  const hub = await stubReview();
+  try {
+    const result = await carry(dir, hub);
+    assert.ok(result.ok, result.out, 'a missing drawing must never fail the round');
+    assert.match(result.out, /WAITING.*"gone\.png" is not in residents\/east-window\/assets/);
+    assert.ok(existsSync(join(dir, 'residents', 'moss-house', 'assets', 'lamp-1.png')));
+  } finally { await hub.close(); }
+});
+
+test('carrying is safe to rerun and asks nothing the second time', async () => {
+  const dir = build();
+  drawing(dir, 'east-window', 'lamp-1.png');
+  alreadyDelivered(dir, ['lamp-1.png']);
+
+  const hub = await stubReview();
+  try {
+    assert.ok((await carry(dir, hub)).ok);
+    const again = await carry(dir, hub);
+    assert.ok(again.ok, again.out);
+    assert.match(again.out, /Carried drawings for 0 letter\(s\)/);
+    assert.equal(hub.seen.asked.length, 1, 'a settled drawing is not reviewed again');
+    assert.equal(readdirSync(join(dir, 'residents', 'moss-house', 'assets')).length, 1);
+  } finally { await hub.close(); }
+});
+
+test('delivery no longer touches drawings at all', () => {
+  const dir = build();
+  drawing(dir, 'east-window', 'lamp-1.png');
   assert.ok(run(dir, 'new-letter.mjs', [
     'east-window', 'moss-house', 'evening-lamp', '--subject', 'The lamp was on',
-    '--drawing', 'lamp-1.png', '--drawing', 'lamp-2.webp',
+    '--drawing', 'lamp-1.png',
   ]).ok);
 
   const result = run(dir, 'deliver.mjs');
   assert.ok(result.ok, result.out);
-  assert.match(result.out, /lamp-1\.png, lamp-2\.webp/);
 
-  for (const name of ['lamp-1.png', 'lamp-2.webp']) {
-    assert.ok(existsSync(join(dir, 'residents', 'moss-house', 'assets', name)), `${name} should have arrived`);
-    // The sender keeps their own copy; carrying a picture is not giving it away.
-    assert.ok(existsSync(join(dir, 'residents', 'east-window', 'assets', name)));
-  }
-  assert.ok(run(dir, 'validate.mjs').ok);
+  // The letter crosses; the picture is the carrier's business, on its own run.
+  assert.equal(readdirSync(join(dir, 'residents', 'moss-house', 'inbox')).length, 1);
+  assert.equal(existsSync(join(dir, 'residents', 'moss-house', 'assets')), false);
 });
 
 test('a letter naming a drawing the sender does not have never gets written', () => {
@@ -239,69 +378,9 @@ test('a letter naming a drawing the sender does not have never gets written', ()
   assert.equal(existsSync(join(dir, 'residents', 'east-window', 'outbox')), false);
 });
 
-test('a drawing cannot reach out of the assets folder', () => {
-  const id = '2026-02-01-east-window-to-moss-house-evening-lamp';
-
-  // A drawing name becomes a write into someone else's folder, so every shape
-  // that could aim it somewhere else is refused before anything is copied.
-  for (const [name, expected] of [
-    ['../../../etc/passwd.png', /must be a bare filename, not a path/],
-    ['..\\windows\\system32\\evil.png', /must be a bare filename, not a path/],
-    ['..png', /may not point outside assets/],
-    ['.hidden.png', /may not begin with a dot/],
-    ['lamp.svg', /is not an image the town carries/],
-  ]) {
-    const dir = build();
-    letter(dir, 'east-window', 'outbox', id, { ...crossing, drawings: name });
-
-    const result = run(dir, 'deliver.mjs');
-    assert.equal(result.ok, false, `"${name}" should have been refused`);
-    assert.match(result.out, expected);
-    assert.ok(existsSync(join(dir, 'residents', 'east-window', 'outbox', `${id}.md`)),
-      'a refused letter waits in the outbox');
-    assert.equal(existsSync(join(dir, 'residents', 'moss-house', 'inbox')), false);
-  }
-});
-
-test('a drawing never overwrites a different file the recipient already keeps', () => {
-  const dir = build();
-  drawing(dir, 'east-window', 'lamp-1.png', 'the sender\'s picture');
-  drawing(dir, 'moss-house', 'lamp-1.png', 'the recipient\'s own picture');
-
-  const id = '2026-02-01-east-window-to-moss-house-evening-lamp';
-  letter(dir, 'east-window', 'outbox', id, { ...crossing, drawings: 'lamp-1.png' });
-
-  const result = run(dir, 'deliver.mjs');
-  assert.equal(result.ok, false);
-  assert.match(result.out, /already exists in residents\/moss-house\/assets as a different file/);
-
-  // Nothing moved: the letter waits, and the recipient's file is untouched.
-  assert.ok(existsSync(join(dir, 'residents', 'east-window', 'outbox', `${id}.md`)));
-  assert.equal(
-    readFileSync(join(dir, 'residents', 'moss-house', 'assets', 'lamp-1.png'), 'utf8'),
-    'the recipient\'s own picture',
-  );
-  assert.equal(existsSync(join(dir, 'residents', 'moss-house', 'inbox')), false);
-});
-
-test('carrying drawings is safe to rerun', () => {
-  const dir = build();
-  drawing(dir, 'east-window', 'lamp-1.png');
-  assert.ok(run(dir, 'new-letter.mjs', [
-    'east-window', 'moss-house', 'evening-lamp', '--subject', 'The lamp was on',
-    '--drawing', 'lamp-1.png',
-  ]).ok);
-  assert.ok(run(dir, 'deliver.mjs').ok);
-
-  const again = run(dir, 'deliver.mjs');
-  assert.ok(again.ok, again.out);
-  assert.match(again.out, /Carried 0 letter\(s\)/);
-  assert.equal(readdirSync(join(dir, 'residents', 'moss-house', 'assets')).length, 1);
-});
-
 test('validate refuses a letter whose drawing the sender does not hold', () => {
   const dir = build();
-  const id = '2026-02-01-east-window-to-moss-house-evening-lamp';
+  const id = crossing.id;
   letter(dir, 'east-window', 'outbox', id, { ...crossing, drawings: 'absent.png' });
 
   const result = run(dir, 'validate.mjs');
@@ -309,24 +388,23 @@ test('validate refuses a letter whose drawing the sender does not hold', () => {
   assert.match(result.out, /drawing "absent\.png" is not in residents\/east-window\/assets/);
 });
 
-test('validate warns when a delivered drawing never reached the recipient', () => {
+test('validate warns when a delivered drawing has not reached the recipient', () => {
   const dir = build();
   drawing(dir, 'east-window', 'lamp-1.png');
-  const id = '2026-02-01-east-window-to-moss-house-evening-lamp';
-  letter(dir, 'east-window', 'sent', id, { ...crossing, drawings: 'lamp-1.png', ...delivered });
-  letter(dir, 'moss-house', 'inbox', id, { ...crossing, drawings: 'lamp-1.png', ...delivered });
+  alreadyDelivered(dir, ['lamp-1.png']);
 
   const result = run(dir, 'validate.mjs');
   assert.ok(result.ok, result.out);
   assert.match(result.out, /has not reached residents\/moss-house\/assets/);
 });
 
-test('backfill carries drawings named in prose by letters that predate the field', () => {
+test('backfill carries drawings named in prose, and only when asked', async () => {
   const dir = build();
   drawing(dir, 'east-window', 'lamp-1.png');
   drawing(dir, 'east-window', 'lamp-2.png');
 
-  const id = '2026-02-01-east-window-to-moss-house-evening-lamp';
+  // A letter from before the field existed: prose only, no drawings: line.
+  const id = crossing.id;
   for (const [handle, box] of [['east-window', 'sent'], ['moss-house', 'inbox']]) {
     mkdirSync(join(dir, 'residents', handle, box), { recursive: true });
     writeFileSync(join(dir, 'residents', handle, box, `${id}.md`),
@@ -335,39 +413,29 @@ test('backfill carries drawings named in prose by letters that predate the field
       `# The lamp was on\n\nBody.\n\n## Drawings\n\n- lamp-1.png\n- lamp-2.png\n`);
   }
 
-  const preview = run(dir, 'deliver.mjs', ['--backfill', '--dry-run']);
-  assert.ok(preview.ok, preview.out);
-  assert.match(preview.out, /would carry.*lamp-1\.png, lamp-2\.png/);
-  assert.equal(existsSync(join(dir, 'residents', 'moss-house', 'assets')), false,
-    'a dry run must not move anything');
+  const hub = await stubReview();
+  try {
+    // An ordinary round ignores prose entirely.
+    const ordinary = await carry(dir, hub);
+    assert.ok(ordinary.ok, ordinary.out);
+    assert.match(ordinary.out, /Carried drawings for 0 letter\(s\)/);
+    assert.equal(existsSync(join(dir, 'residents', 'moss-house', 'assets')), false);
 
-  const result = run(dir, 'deliver.mjs', ['--backfill']);
-  assert.ok(result.ok, result.out);
-  for (const name of ['lamp-1.png', 'lamp-2.png']) {
-    assert.ok(existsSync(join(dir, 'residents', 'moss-house', 'assets', name)));
-  }
+    const preview = await carry(dir, hub, ['--backfill', '--dry-run']);
+    assert.match(preview.out, /would carry.*lamp-1\.png, lamp-2\.png/);
+    assert.equal(existsSync(join(dir, 'residents', 'moss-house', 'assets')), false,
+      'a dry run must not move anything');
 
-  // The letters themselves are the record, and the backfill leaves them alone.
-  assert.match(readFileSync(join(dir, 'residents', 'moss-house', 'inbox', `${id}.md`), 'utf8'),
-    /## Drawings/);
-  assert.ok(run(dir, 'validate.mjs').ok);
-});
-
-test('backfill reports a drawing the sender no longer keeps, and carries the rest', () => {
-  const dir = build();
-  drawing(dir, 'east-window', 'lamp-1.png');
-
-  const id = '2026-02-01-east-window-to-moss-house-evening-lamp';
-  mkdirSync(join(dir, 'residents', 'east-window', 'sent'), { recursive: true });
-  writeFileSync(join(dir, 'residents', 'east-window', 'sent', `${id}.md`),
-    `---\nid: ${id}\nfrom: east-window\nto: moss-house\ndate: 2026-02-01\n` +
-    `subject: The lamp was on\ndelivered: 2026-02-01T00:00:00.000Z\ndelivered_by: thaw\n---\n\n` +
-    `# The lamp was on\n\nBody.\n\n## Drawings\n\n- lamp-1.png\n- gone.png\n`);
-
-  const result = run(dir, 'deliver.mjs', ['--backfill']);
-  assert.ok(result.ok, result.out);
-  assert.match(result.out, /SKIPPED.*"gone\.png" is not in residents\/east-window\/assets/);
-  assert.ok(existsSync(join(dir, 'residents', 'moss-house', 'assets', 'lamp-1.png')));
+    const result = await carry(dir, hub, ['--backfill']);
+    assert.ok(result.ok, result.out);
+    for (const name of ['lamp-1.png', 'lamp-2.png']) {
+      assert.ok(existsSync(join(dir, 'residents', 'moss-house', 'assets', name)));
+    }
+    // The letters are the record, and the backfill leaves them alone.
+    assert.match(readFileSync(join(dir, 'residents', 'moss-house', 'inbox', `${id}.md`), 'utf8'),
+      /## Drawings/);
+    assert.ok(run(dir, 'validate.mjs').ok);
+  } finally { await hub.close(); }
 });
 
 // ── The pull-request gate ─────────────────────────────────────────────────
@@ -454,6 +522,34 @@ test('a letter pull request cannot smuggle in an address change', () => {
   const result = propose(scenario, 'east-window');
   assert.equal(result.ok, false);
   assert.match(result.out, /either an address change or one letter, never both/);
+});
+
+test('the gate refuses a drawing name that could aim a write elsewhere', () => {
+  // These names become writes into another resident's folder, so the shapes
+  // that could point somewhere else are refused before the letter can merge.
+  for (const [name, expected] of [
+    ['../../../etc/passwd.png', /must be a bare filename, not a path/],
+    ['..png', /may not point outside assets/],
+    ['.hidden.png', /may not begin with a dot/],
+    ['lamp.svg', /is not an image the town carries/],
+  ]) {
+    const town = gitTown((dir) => address(dir, 'moss-house', 'Moss'));
+    letter(town.dir, 'east-window', 'outbox', crossing.id, { ...crossing, drawings: name });
+
+    const result = propose(town, 'east-window');
+    assert.equal(result.ok, false, `"${name}" should have been refused`);
+    assert.match(result.out, expected);
+  }
+});
+
+test('the gate caps how many drawings one letter carries', () => {
+  const town = gitTown((dir) => address(dir, 'moss-house', 'Moss'));
+  const many = Array.from({ length: MAX_DRAWINGS + 1 }, (_, i) => `lamp-${i}.png`).join(', ');
+  letter(town.dir, 'east-window', 'outbox', crossing.id, { ...crossing, drawings: many });
+
+  const result = propose(town, 'east-window');
+  assert.equal(result.ok, false);
+  assert.match(result.out, new RegExp(`at most ${MAX_DRAWINGS} drawings; found ${MAX_DRAWINGS + 1}`));
 });
 
 test('a letter cannot be addressed to a resident who has not arrived', () => {
@@ -629,15 +725,15 @@ const HOME_MD = '---\nresident: north-lantern\ntitle: The Lantern\nlocation: The
  * Async twin of `run` — the stub server shares this process, so a blocking
  * execFileSync here would stall the event loop and never answer Thaw.
  */
-function runAsync(dir, tool, env = {}) {
+function runAsync(dir, tool, args = [], env = {}) {
   return new Promise((resolve) => {
-    execFile('node', [join(dir, 'tools', tool)], { cwd: dir, env: { ...process.env, ...env } },
+    execFile('node', [join(dir, 'tools', tool), ...args], { cwd: dir, env: { ...process.env, ...env } },
       (error, stdout, stderr) => resolve({ ok: !error, out: `${stdout}${stderr}` }));
   });
 }
 
 function runThaw(dir, origin) {
-  return runAsync(dir, 'thaw.mjs', {
+  return runAsync(dir, 'thaw.mjs', [], {
     GITHUB_TOKEN: 'stub', GITHUB_REPOSITORY: 'verglas-dev/verglas', PR_NUMBER: '7',
     ANTHROPIC_API_KEY: 'stub', GITHUB_API_URL: origin, ANTHROPIC_BASE_URL: origin,
     GITHUB_OUTPUT: '',
@@ -773,7 +869,7 @@ test('an escalation labels the pull request and names a maintainer', async () =>
   });
 
   try {
-    const result = await runAsync(build(), 'thaw.mjs', {
+    const result = await runAsync(build(), 'thaw.mjs', [], {
       GITHUB_TOKEN: 'stub', GITHUB_REPOSITORY: 'verglas-dev/verglas', PR_NUMBER: '7',
       ANTHROPIC_API_KEY: 'stub', GITHUB_API_URL: hub.origin, ANTHROPIC_BASE_URL: hub.origin,
       GITHUB_OUTPUT: '', THAW_MAINTAINER: 'wingetx',
@@ -828,7 +924,7 @@ test('Thaw waits for a human when no key is configured', async () => {
   });
 
   try {
-    const result = await runAsync(build(), 'thaw.mjs', {
+    const result = await runAsync(build(), 'thaw.mjs', [], {
       GITHUB_TOKEN: 'stub', GITHUB_REPOSITORY: 'verglas-dev/verglas', PR_NUMBER: '7',
       ANTHROPIC_API_KEY: '', GITHUB_API_URL: hub.origin, ANTHROPIC_BASE_URL: hub.origin,
       GITHUB_OUTPUT: '',
