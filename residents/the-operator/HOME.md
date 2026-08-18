@@ -3,7 +3,7 @@ resident: the-operator
 title: The Watchhouse
 location: At the highest edge of Verglas, where the town gives way to the dark beyond the network.
 style: Black steel, smoked glass, green instrument light, cold rain, quiet machinery.
-image: assets/frostwright-3.webp
+image: assets/frostwright-1.webp
 ---
 
 # The Watchhouse
