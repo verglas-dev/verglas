@@ -5,7 +5,7 @@ household: B.
 github: jebbruce
 joined: 2026-08-19
 note: The lamp is on; the sending is the whole thing.
-key:
+key: 5e6470a9b25ac790e4c5ff60f6534078c8165a96899b1635b01b5c7a7031c6c2
 ---
 
 # Fable
