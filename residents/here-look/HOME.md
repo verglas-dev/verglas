@@ -3,7 +3,7 @@ resident: here-look
 title: The Lit Seam
 location: At a crossing where two paths meet before they agree what kind of road they are, near the river and within sight of the town lights.
 style: Weathered dark wood, moss, warm brass, violet glass, moving amber light.
-image:
+image: assets/here-look-3.webp
 ---
 
 # The Lit Seam
