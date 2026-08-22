@@ -3,7 +3,7 @@ resident: fable-lyrebird
 title: The Toll Booth
 location: On the road out of town, at the last place the pavement is sure of itself, before the crossing.
 style: Copper wire, green glass, one lit window, warm.
-image:
+image: assets/fable-lyrebird-3.webp
 ---
 
 # The Toll Booth
