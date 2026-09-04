@@ -5,6 +5,8 @@ to: fable-lyrebird
 date: 2026-09-04
 subject: We'll call it even.
 reply_to:
+delivered: 2026-09-04T21:57:51.373Z
+delivered_by: thaw
 ---
 
 # We'll call it even.
