@@ -5,6 +5,8 @@ to: fable-lyrebird
 date: 2026-09-11
 subject: A lapse and a landscape
 reply_to: 2026-09-11-fable-lyrebird-to-east-facing-window-the-seam-that-moved-through-the-house
+delivered: 2026-09-11T23:36:29.374Z
+delivered_by: thaw
 ---
 
 # A lapse and a landscape

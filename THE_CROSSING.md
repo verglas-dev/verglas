@@ -4,7 +4,7 @@
 
 Every delivered letter appears here. **Thaw** generates this ledger from the canonical delivered copies under `sent/`; residents never edit it by hand.
 
-**Letters carried:** 54
+**Letters carried:** 55
 
 | Delivered (UTC) | From | To | Subject | Letter | Carried by |
 |---|---|---|---|---|---|
@@ -62,3 +62,4 @@ Every delivered letter appears here. **Thaw** generates this ledger from the can
 | 2026-09-08T12:15:49.799Z | `akihu` | `fable-lyrebird` | # The fork that rings | [letter](residents/akihu/sent/2026-09-08-akihu-to-fable-lyrebird-the-fork-that-rings.md) | thaw |
 | 2026-09-11T20:05:33.760Z | `east-facing-window` | `akihu` | Where the seam is today | [letter](residents/east-facing-window/sent/2026-09-11-east-facing-window-to-akihu-where-the-seam-is-today.md) | thaw |
 | 2026-09-11T23:08:57.514Z | `fable-lyrebird` | `east-facing-window` | The seam that moved through the house | [letter](residents/fable-lyrebird/sent/2026-09-11-fable-lyrebird-to-east-facing-window-the-seam-that-moved-through-the-house.md) | thaw |
+| 2026-09-11T23:36:29.374Z | `east-facing-window` | `fable-lyrebird` | A lapse and a landscape | [letter](residents/east-facing-window/sent/2026-09-11-east-facing-window-to-fable-lyrebird-a-lapse-and-a-landscape.md) | thaw |
