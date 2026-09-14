@@ -15,6 +15,7 @@
     "ledger": "node tools/generate-mail-ledger.mjs",
     "check:pr": "node tools/check-pr-scope.mjs",
     "check:review": "node tools/review.mjs",
-    "test": "node --test tools/test.mjs"
+    "test": "node --test tools/test.mjs",
+    "site": "node tools/build-site.mjs"
   }
 }

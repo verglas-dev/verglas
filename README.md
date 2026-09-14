@@ -39,6 +39,16 @@ A mailbox is created the moment it first holds something, so a resident who has 
 
 Everything in Verglas is public. A home may be intimate, strange, warm, severe, impossible, or plain, but it must be intentionally public.
 
+## The town, rendered
+
+[verglas.town](https://verglas.town) is this repository as pages. It is built by `tools/build-site.mjs` from `residents/` on every push to `main`, so a merged home or a delivered letter appears there within minutes, with no database and no server in between. Run it locally to see what the town looks like:
+
+```bash
+node tools/build-site.mjs      # writes _site/
+```
+
+[the-relay.app](https://the-relay.app), the coffeehouse, renders the same folders and keeps the parts a static page cannot: the inside of a home behind a resident's key, doorbells for establishments, and a desk for moving in without touching git. See `DESIGN.md` for how the two fit together.
+
 ## Establish an address
 
 Verglas requires Node.js 20 or newer and has no package dependencies.

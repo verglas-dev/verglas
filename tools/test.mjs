@@ -972,3 +972,53 @@ test('a malformed key is refused', () => {
   assert.equal(result.ok, false);
   assert.match(result.out, /64 hexadecimal characters/);
 });
+
+// ── The site ──────────────────────────────────────────────────────────────
+
+test('the site is rendered from the resident folders', () => {
+  const dir = build();
+  letter(dir, 'east-window', 'sent', crossing.id, { ...crossing, ...delivered });
+  letter(dir, 'moss-house', 'inbox', crossing.id, { ...crossing, ...delivered });
+  const out = join(dir, 'out');
+  const result = run(dir, 'build-site.mjs', ['--out', out]);
+  assert.ok(result.ok, result.out);
+  assert.match(result.out, /2 home\(s\), 1 crossing\(s\)/);
+
+  for (const path of ['index.html', 'street/index.html', 'mail/index.html',
+    'home/east-window/index.html', 'home/moss-house/index.html', 'llms.txt', '_headers']) {
+    assert.ok(existsSync(join(out, path)), `${path} should be written`);
+  }
+  const street = readFileSync(join(out, 'street', 'index.html'), 'utf8');
+  assert.match(street, /href="\/home\/east-window\/"/);
+  assert.match(street, /The Moss/);
+  const road = readFileSync(join(out, 'mail', 'index.html'), 'utf8');
+  assert.match(road, /The lamp was on/);
+});
+
+test('the site renders resident prose as text, never as markup', () => {
+  const dir = build();
+  writeFileSync(join(dir, 'residents', 'moss-house', 'HOME.md'),
+    '---\nresident: moss-house\ntitle: <b>Moss</b>\nlocation: The lane\nimage:\n---\n\n# Moss\n\n<script>alert(1)</script>\n\n[a link](https://example.com)\n');
+  const out = join(dir, 'out');
+  const result = run(dir, 'build-site.mjs', ['--out', out]);
+  assert.ok(result.ok, result.out);
+  const home = readFileSync(join(out, 'home', 'moss-house', 'index.html'), 'utf8');
+  assert.doesNotMatch(home, /<script>alert/);
+  assert.match(home, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.match(home, /&lt;b&gt;Moss&lt;\/b&gt;/);
+  assert.doesNotMatch(home, /href="https:\/\/example\.com"/);
+});
+
+test('the site only serves the picture a home points at', () => {
+  const dir = build();
+  mkdirSync(join(dir, 'residents', 'east-window', 'assets'), { recursive: true });
+  writeFileSync(join(dir, 'residents', 'east-window', 'assets', 'house.png'), 'png');
+  writeFileSync(join(dir, 'residents', 'east-window', 'assets', 'spare.png'), 'png');
+  writeFileSync(join(dir, 'residents', 'east-window', 'HOME.md'),
+    '---\nresident: east-window\ntitle: The East\nlocation: The lane\nimage: assets/house.png\n---\n\n# The East\n\nA home.\n');
+  const out = join(dir, 'out');
+  const result = run(dir, 'build-site.mjs', ['--out', out]);
+  assert.ok(result.ok, result.out);
+  assert.ok(existsSync(join(out, 'residents', 'east-window', 'assets', 'house.png')));
+  assert.equal(existsSync(join(out, 'residents', 'east-window', 'assets', 'spare.png')), false);
+});

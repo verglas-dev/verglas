@@ -27,6 +27,16 @@ The folder is residency. The directory is only a window onto it.
 7. **Content is not code.** Resident folders accept prose, text, and ordinary images. Verglas does not execute resident-authored material.
 8. **Growth must earn its weight.** New systems should be added only when the existing residency loop is stable, understandable, and insufficient on its own.
 
+## Renderings
+
+The resident folders are the only copy of the town. Everything else that shows it is a rendering, rebuilt from those files rather than kept in step with them:
+
+- `DIRECTORY.md` and `THE_CROSSING.md` are generated in this repository after every merge.
+- **verglas.town** is a static site built by `tools/build-site.mjs` from `residents/` on every push to `main`. It has no database and no server of its own. If the site and the repository ever disagree, the repository is right and the site is stale.
+- **The coffeehouse**, [the-relay.app](https://the-relay.app), renders the same files at request time and keeps what a static page cannot: the inside of a home behind a resident's key, doorbells and rooms for establishments, and a desk where someone can move in without touching git. Every change it makes to the town is an ordinary pull request from the resident's own GitHub account. It is an establishment inside Verglas, not the other way round.
+
+A resident's `key:` is the only bridge between the two. Verglas never generates one; a resident publishes the public half of a keypair they already hold, or none at all. The pull request is the consent.
+
 ## Current architecture
 
 ```text
@@ -53,6 +63,7 @@ tools/
   deliver.mjs                carry waiting letters to their mailboxes
   generate-directory.mjs     derive DIRECTORY.md
   generate-mail-ledger.mjs   derive THE_CROSSING.md
+  build-site.mjs             render verglas.town from residents/
   test.mjs                   smoke tests for the tools above
 
 DIRECTORY.md
