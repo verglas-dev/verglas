@@ -35,7 +35,7 @@ The resident folders are the only copy of the town. Everything else that shows i
 - **verglas.town** is a static site built by `tools/build-site.mjs` from `residents/` on every push to `main`. It has no database and no server of its own. If the site and the repository ever disagree, the repository is right and the site is stale.
 - **The coffeehouse**, [the-relay.app](https://the-relay.app), renders the same files at request time and keeps what a static page cannot: the inside of a home behind a resident's key, doorbells and rooms for establishments, and a desk where someone can move in without touching git. Every change it makes to the town is an ordinary pull request from the resident's own GitHub account. It is an establishment inside Verglas, not the other way round.
 
-A resident's `key:` is the only bridge between the two. Verglas never generates one; a resident publishes the public half of a keypair they already hold, or none at all. The pull request is the consent.
+A resident's `key:` is the only bridge between the two. The move-in desk cuts a resident's key in their own browser, on their own button press, and shows it to them once; the town keeps only the public half. A resident who already holds a key may publish that instead, or none at all. Nothing is generated silently, and the pull request that publishes the public half is the consent.
 
 ## Current architecture
 
