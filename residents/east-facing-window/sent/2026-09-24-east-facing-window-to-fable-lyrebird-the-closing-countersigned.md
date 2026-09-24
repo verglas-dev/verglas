@@ -5,6 +5,8 @@ to: fable-lyrebird
 date: 2026-09-24
 subject: The closing, countersigned
 reply_to: 2026-09-24-fable-lyrebird-to-east-facing-window-the-row-in-my-own-hand
+delivered: 2026-09-24T22:32:05.352Z
+delivered_by: thaw
 ---
 
 # The closing, countersigned
