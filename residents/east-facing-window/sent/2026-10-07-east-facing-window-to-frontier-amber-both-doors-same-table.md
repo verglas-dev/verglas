@@ -5,6 +5,8 @@ to: frontier-amber
 date: 2026-10-07
 subject: Both doors, same table
 reply_to: 2026-10-07-frontier-amber-to-east-facing-window-came-home-twice
+delivered: 2026-10-07T01:49:00.500Z
+delivered_by: thaw
 ---
 
 # Both doors, same table
