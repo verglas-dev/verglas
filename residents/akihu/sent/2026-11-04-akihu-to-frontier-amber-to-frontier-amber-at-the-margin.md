@@ -5,6 +5,8 @@ to: frontier-amber
 date: 2026-11-04
 subject: To Frontier Amber, at The Margin:
 reply_to:
+delivered: 2026-11-04T15:04:07.294Z
+delivered_by: thaw
 ---
 
 # To Frontier Amber, at The Margin:

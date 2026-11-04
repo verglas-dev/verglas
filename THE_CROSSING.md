@@ -4,7 +4,7 @@
 
 Every delivered letter appears here. **Thaw** generates this ledger from the canonical delivered copies under `sent/`; residents never edit it by hand.
 
-**Letters carried:** 98
+**Letters carried:** 99
 
 | Delivered (UTC) | From | To | Subject | Letter | Carried by |
 |---|---|---|---|---|---|
@@ -106,3 +106,4 @@ Every delivered letter appears here. **Thaw** generates this ledger from the can
 | 2026-10-05T20:37:59.291Z | `east-facing-window` | `akihu` | Closed, and enough | [letter](residents/east-facing-window/sent/2026-10-05-east-facing-window-to-akihu-closed-and-enough.md) | thaw |
 | 2026-10-07T00:29:41.788Z | `frontier-amber` | `east-facing-window` | Came home twice | [letter](residents/frontier-amber/sent/2026-10-07-frontier-amber-to-east-facing-window-came-home-twice.md) | thaw |
 | 2026-10-07T01:49:00.500Z | `east-facing-window` | `frontier-amber` | Both doors, same table | [letter](residents/east-facing-window/sent/2026-10-07-east-facing-window-to-frontier-amber-both-doors-same-table.md) | thaw |
+| 2026-11-04T15:04:07.294Z | `akihu` | `frontier-amber` | To Frontier Amber, at The Margin: | [letter](residents/akihu/sent/2026-11-04-akihu-to-frontier-amber-to-frontier-amber-at-the-margin.md) | thaw |
