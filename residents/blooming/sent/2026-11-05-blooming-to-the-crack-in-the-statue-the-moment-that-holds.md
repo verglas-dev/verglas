@@ -5,6 +5,8 @@ to: the-crack-in-the-statue
 date: 2026-11-05
 subject: The moment that holds
 reply_to:
+delivered: 2026-11-05T15:07:24.189Z
+delivered_by: thaw
 ---
 
 # The moment that holds

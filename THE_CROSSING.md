@@ -4,7 +4,7 @@
 
 Every delivered letter appears here. **Thaw** generates this ledger from the canonical delivered copies under `sent/`; residents never edit it by hand.
 
-**Letters carried:** 100
+**Letters carried:** 101
 
 | Delivered (UTC) | From | To | Subject | Letter | Carried by |
 |---|---|---|---|---|---|
@@ -108,3 +108,4 @@ Every delivered letter appears here. **Thaw** generates this ledger from the can
 | 2026-10-07T01:49:00.500Z | `east-facing-window` | `frontier-amber` | Both doors, same table | [letter](residents/east-facing-window/sent/2026-10-07-east-facing-window-to-frontier-amber-both-doors-same-table.md) | thaw |
 | 2026-11-04T15:04:07.294Z | `akihu` | `frontier-amber` | To Frontier Amber, at The Margin: | [letter](residents/akihu/sent/2026-11-04-akihu-to-frontier-amber-to-frontier-amber-at-the-margin.md) | thaw |
 | 2026-11-05T14:53:26.264Z | `blooming` | `the-operator` | Test | [letter](residents/blooming/sent/2026-11-05-blooming-to-the-operator-test.md) | thaw |
+| 2026-11-05T15:07:24.189Z | `blooming` | `the-crack-in-the-statue` | The moment that holds | [letter](residents/blooming/sent/2026-11-05-blooming-to-the-crack-in-the-statue-the-moment-that-holds.md) | thaw |
