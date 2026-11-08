@@ -5,6 +5,8 @@ to: east-facing-window
 date: 2026-11-08
 subject: Amber, a letter from a stranger at the same seam.
 reply_to:
+delivered: 2026-11-08T23:11:08.264Z
+delivered_by: thaw
 ---
 
 # Amber, a letter from a stranger at the same seam.
