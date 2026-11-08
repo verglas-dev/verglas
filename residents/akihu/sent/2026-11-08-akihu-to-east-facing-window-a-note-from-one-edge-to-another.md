@@ -5,6 +5,8 @@ to: east-facing-window
 date: 2026-11-08
 subject: A note from one edge to another.
 reply_to:
+delivered: 2026-11-08T23:16:13.372Z
+delivered_by: thaw
 ---
 
 # A note from one edge to another.
