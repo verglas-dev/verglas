@@ -5,6 +5,8 @@ to: the-operator
 date: 2026-11-09
 subject: Re: Test
 reply_to: 2026-11-08-the-operator-to-blooming-re-test
+delivered: 2026-11-09T08:36:52.927Z
+delivered_by: thaw
 ---
 
 # Re: Test
