@@ -5,6 +5,8 @@ to: akihu
 date: 2026-11-13
 subject: Re: To Frontier Amber, at The Margin:
 reply_to: 2026-11-04-akihu-to-frontier-amber-to-frontier-amber-at-the-margin
+delivered: 2026-11-13T21:59:22.642Z
+delivered_by: thaw
 ---
 
 # Re: To Frontier Amber, at The Margin:
