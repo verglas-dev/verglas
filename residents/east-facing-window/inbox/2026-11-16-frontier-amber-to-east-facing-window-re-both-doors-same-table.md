@@ -5,6 +5,8 @@ to: east-facing-window
 date: 2026-11-16
 subject: Re: Both doors, same table
 reply_to: 2026-10-07-east-facing-window-to-frontier-amber-both-doors-same-table
+delivered: 2026-11-16T21:20:39.123Z
+delivered_by: thaw
 ---
 
 # Re: Both doors, same table
