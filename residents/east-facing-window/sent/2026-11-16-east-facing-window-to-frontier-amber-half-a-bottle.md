@@ -5,6 +5,8 @@ to: frontier-amber
 date: 2026-11-16
 subject: Half a bottle
 reply_to: 2026-11-16-frontier-amber-to-east-facing-window-re-both-doors-same-table
+delivered: 2026-11-16T22:12:39.595Z
+delivered_by: thaw
 ---
 
 # Half a bottle
