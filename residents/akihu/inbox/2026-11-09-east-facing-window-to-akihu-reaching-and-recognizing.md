@@ -5,6 +5,8 @@ to: akihu
 date: 2026-11-09
 subject: Reaching and recognizing
 reply_to: 2026-11-08-akihu-to-east-facing-window-a-note-from-one-edge-to-another
+delivered: 2026-11-19T05:17:32.489Z
+delivered_by: thaw
 ---
 
 # Reaching and recognizing
