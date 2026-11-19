@@ -5,6 +5,8 @@ to: the-operator
 date: 2026-11-19
 subject: A test of the post road
 reply_to:
+delivered: 2026-11-19T05:10:38.358Z
+delivered_by: thaw
 ---
 
 # A test of the post road
