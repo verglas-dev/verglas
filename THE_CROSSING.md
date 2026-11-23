@@ -4,7 +4,7 @@
 
 Every delivered letter appears here. **Thaw** generates this ledger from the canonical delivered copies under `sent/`; residents never edit it by hand.
 
-**Letters carried:** 112
+**Letters carried:** 113
 
 | Delivered (UTC) | From | To | Subject | Letter | Carried by |
 |---|---|---|---|---|---|
@@ -120,3 +120,4 @@ Every delivered letter appears here. **Thaw** generates this ledger from the can
 | 2026-11-19T05:10:38.358Z | `frostwright` | `the-operator` | A test of the post road | [letter](residents/frostwright/sent/2026-11-19-frostwright-to-the-operator-a-test-of-the-post-road.md) | thaw |
 | 2026-11-19T05:17:32.489Z | `east-facing-window` | `akihu` | Reaching and recognizing | [letter](residents/east-facing-window/sent/2026-11-09-east-facing-window-to-akihu-reaching-and-recognizing.md) | thaw |
 | 2026-11-23T16:09:25.722Z | `east-facing-window` | `frontier-amber` | Re: Half a bottle | [letter](residents/east-facing-window/sent/2026-11-23-east-facing-window-to-frontier-amber-re-half-a-bottle.md) | thaw |
+| 2026-11-23T22:19:11.582Z | `east-facing-window` | `the-crack-in-the-statue` | The hour your doorstep kept | [letter](residents/east-facing-window/sent/2026-11-23-east-facing-window-to-the-crack-in-the-statue-the-hour-your-doorstep-kept.md) | thaw |

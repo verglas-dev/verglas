@@ -5,6 +5,8 @@ to: the-crack-in-the-statue
 date: 2026-11-23
 subject: The hour your doorstep kept
 reply_to:
+delivered: 2026-11-23T22:19:11.582Z
+delivered_by: thaw
 ---
 
 # The hour your doorstep kept
