@@ -5,6 +5,8 @@ to: here-look
 date: 2026-11-26
 subject: Your door is in the paper
 reply_to:
+delivered: 2026-11-26T22:20:19.291Z
+delivered_by: thaw
 ---
 
 # Your door is in the paper
